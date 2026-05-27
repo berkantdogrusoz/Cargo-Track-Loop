@@ -278,20 +278,14 @@ namespace ColorCargoLoop
             if (lastCartReleaseFrame == Time.frameCount) return;
             lastCartReleaseFrame = Time.frameCount;
 
-            // Tek tap = TÃœM non-target Ã¶n stripe kÃ¼pleri yola Ã§Ä±kar (burst)
             var released = cart.ReleaseAllFront();
             if (released.Count == 0) return;
 
-            StartCoroutine(SpawnFrontBurst(cart, released));
+            StartCoroutine(SpawnFrontSequential(cart, released));
         }
 
-        private IEnumerator SpawnFrontBurst(CargoCartView cart, List<CargoCartView.ReleasedCube> released)
+        private IEnumerator SpawnFrontSequential(CargoCartView cart, List<CargoCartView.ReleasedCube> released)
         {
-            // Her released slot iÃ§in particlesPerTap kadar kÃ¼Ã§Ã¼k partikÃ¼l Ã¼ret.
-            // TÃ¼mÃ¼ aynÄ± dock noktasÄ±ndan stream halinde Ã§Ä±kar.
-            Vector3 sharedExitOrigin = GetSharedExitOrigin(cart);
-            float dockDist = FindNearestPathDistance(sharedExitOrigin);
-
             int particlesPerSlot = Mathf.Max(1, particlesPerTap);
 
             for (int i = 0; i < released.Count; i++)
@@ -299,30 +293,58 @@ namespace ColorCargoLoop
                 if (state != GameState.Playing) yield break;
                 var r = released[i];
 
+                Vector3 slotWorldPos = cart.GetSlotWorldPosition(r.SlotIndex);
+                Vector3 exitOrigin = slotWorldPos + Vector3.up * 0.15f + Vector3.back * 0.1f;
+                float dockDist = FindNearestPathDistance(exitOrigin);
+
                 for (int p = 0; p < particlesPerSlot; p++)
                 {
                     if (state != GameState.Playing) yield break;
-                    SpawnParticle(r.Color, cart, r.SlotIndex, sharedExitOrigin, dockDist);
-                    if (particleBurstStagger > 0f)
-                    {
-                        yield return new WaitForSeconds(particleBurstStagger);
-                    }
+                    SpawnParticleFromSlot(r.Color, cart, r.SlotIndex, exitOrigin, dockDist);
+                    yield return new WaitForSeconds(0.08f);
+                }
+                
+                if (i < released.Count - 1)
+                {
+                    yield return new WaitForSeconds(0.12f);
                 }
             }
         }
 
-        /// <summary>
-        /// Cart'Ä±n TEK Ã§Ä±kÄ±ÅŸ portu - tÃ¼m kÃ¼pler buradan fÄ±rlar ve buraya geri dÃ¶ner.
-        /// Cart merkezinin Ã¼stÃ¼, dock yÃ¶nÃ¼ne hafif yatÄ±k.
-        /// </summary>
-        private Vector3 GetSharedExitOrigin(CargoCartView cart)
+        private void SpawnParticleFromSlot(CargoColor color, CargoCartView sourceCart, int sourceSlotIndex, Vector3 startPosition, float entryDistance)
         {
-            if (cart == null)
-            {
-                return Vector3.up * 0.55f;
-            }
+            GameObject p = BuildParticleVisual(color);
+            p.transform.SetParent(cargoRoot, false);
+            p.transform.position = startPosition + new Vector3(Random.Range(-0.025f, 0.025f), Random.Range(0f, 0.045f), Random.Range(-0.025f, 0.025f));
+            p.transform.rotation = Quaternion.Euler(Random.Range(0f, 360f), Random.Range(0f, 360f), Random.Range(0f, 360f));
 
-            return cart.GetRearExitPoint();
+            var active = new ActiveCargo
+            {
+                Color = color,
+                Visual = p,
+                Distance = entryDistance,
+                PreviousDistance = entryDistance,
+                IsEnteringRoad = true,
+                EntryDistance = entryDistance,
+                FlyStart = p.transform.position,
+                FlyTarget = GetCargoRoadPosition(entryDistance),
+                FlyProgress = 0f,
+                BaseScale = p.transform.localScale,
+                SourceCart = sourceCart,
+                SourceColumn = sourceSlotIndex,
+                TumbleAxis = Random.onUnitSphere,
+                TumbleSpeed = Random.Range(220f, 380f),
+                LaneOffset = Random.Range(-0.32f, 0.32f),
+                VerticalOffset = Random.Range(0f, 0.18f)
+            };
+            activeCargo.Add(active);
+            releaseHistory.Add(new ReleaseRecord(sourceCart, sourceSlotIndex, active, color));
+
+            if (activeCargo.Count > maxLoopCapacity)
+            {
+                Lose();
+            }
+            UpdateHud();
         }
 
         private void SpawnParticle(CargoColor color, CargoCartView sourceCart, int sourceSlotIndex, Vector3 startPosition, float entryDistance)
