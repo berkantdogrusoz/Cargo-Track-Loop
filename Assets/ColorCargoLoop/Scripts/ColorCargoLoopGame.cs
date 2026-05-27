@@ -369,7 +369,7 @@ namespace ColorCargoLoop
             if (!cargoMaterials.TryGetValue(color, out mat))
             {
                 mat = new Material(Shader.Find("Standard"));
-                mat.color = GetColorValue(color);
+                mat.color = CargoColorPalette.ToColor(color);
                 mat.SetFloat("_Metallic", 0.1f);
                 mat.SetFloat("_Smoothness", 0.4f);
                 cargoMaterials[color] = mat;
