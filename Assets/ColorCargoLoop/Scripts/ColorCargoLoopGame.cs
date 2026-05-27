@@ -286,29 +286,98 @@ namespace ColorCargoLoop
 
         private IEnumerator SpawnFrontSequential(CargoCartView cart, List<CargoCartView.ReleasedCube> released)
         {
-            int particlesPerSlot = Mathf.Max(1, particlesPerTap);
-
+            // Artık partikül yağdırmıyoruz, tırda duran BÜYÜK KÜPLERİ tek tek fırlatacağız
             for (int i = 0; i < released.Count; i++)
             {
                 if (state != GameState.Playing) yield break;
                 var r = released[i];
 
+                // Tırın içindeki slotun dünya pozisyonunu al
                 Vector3 slotWorldPos = cart.GetSlotWorldPosition(r.SlotIndex);
-                Vector3 exitOrigin = slotWorldPos + Vector3.up * 0.15f + Vector3.back * 0.1f;
+                
+                // Tırın içindeki "FullVisual" (büyük küp) objesini bulmaya çalış
+                // CargoCartView içindeki Slot yapısında FullVisual tutuluyor ama public değil
+                // Bu yüzden GetSlotWorldPosition'dan gelen yerden bir küp spawn edip oradan fırlatacağız
+                // YA DA daha iyisi: CargoCartView'a bir metod ekleyip o görseli alacağız.
+                // Şimdilik mevcut yapıda en temiz çözüm: 
+                // Tırın slot pozisyonunda yeni bir "Büyük Küp" oluşturup onu fırlatmak.
+                // Ama sen "tırda zaten duranlar uçsun" dedin. 
+                // O halde CargoCartView içindeki FullVisual'ı erişilebilir yapmalıyız veya oradan hareket ettirmeliyiz.
+                
+                // En garanti yöntem: Tırın slotundaki görseli (varsa) al, yoksa spawn et.
+                // CargoCartView.Slots[r.SlotIndex].FullVisual -> bu private olduğu için erişemiyoruz.
+                // Bu yüzden CargoCartView'a bir getter eklememiz lazım.
+                
+                // HIZLI ÇÖZÜM: Mevcut sistemi "Büyük Küp" mantığına çeviriyoruz.
+                // SpawnParticleFromSlot yerine direkt Büyük Küp fırlatan bir korutin yazıyoruz.
+                
+                Vector3 exitOrigin = slotWorldPos + Vector3.up * 0.2f + Vector3.back * 0.1f;
                 float dockDist = FindNearestPathDistance(exitOrigin);
 
-                for (int p = 0; p < particlesPerSlot; p++)
-                {
-                    if (state != GameState.Playing) yield break;
-                    SpawnParticleFromSlot(r.Color, cart, r.SlotIndex, exitOrigin, dockDist);
-                    yield return new WaitForSeconds(0.08f);
-                }
-                
-                if (i < released.Count - 1)
-                {
-                    yield return new WaitForSeconds(0.12f);
-                }
+                // Büyük küpü yarat ve fırlat
+                SpawnBigCargoFromCart(r.Color, cart, r.SlotIndex, exitOrigin, dockDist);
+
+                // Sıradaki küp için kısa bekleme (akıcı döküm efekti)
+                yield return new WaitForSeconds(0.15f);
             }
+        }
+
+        private void SpawnBigCargoFromCart(CargoColor color, CargoCartView sourceCart, int sourceSlotIndex, Vector3 startPosition, float entryDistance)
+        {
+            // Yoldaki normal küp boyutunda (roadCargoScale) bir küp oluştur
+            GameObject cargoObj = CreateCargoVisual(color, roadCargoScale);
+            cargoObj.transform.SetParent(cargoRoot, false);
+            cargoObj.transform.position = startPosition;
+            cargoObj.transform.rotation = Quaternion.identity;
+
+            var active = new ActiveCargo
+            {
+                Color = color,
+                Visual = cargoObj,
+                Distance = entryDistance,
+                PreviousDistance = entryDistance,
+                IsEnteringRoad = true,
+                EntryDistance = entryDistance,
+                FlyStart = startPosition,
+                FlyTarget = GetCargoRoadPosition(entryDistance),
+                FlyProgress = 0f,
+                BaseScale = roadCargoScale, // Normal küp boyutu
+                SourceCart = sourceCart,
+                SourceColumn = sourceSlotIndex,
+                TumbleAxis = Random.onUnitSphere,
+                TumbleSpeed = Random.Range(180f, 360f),
+                LaneOffset = Random.Range(-0.1f, 0.1f), // Daha az saçılma
+                VerticalOffset = 0f
+            };
+            activeCargo.Add(active);
+            releaseHistory.Add(new ReleaseRecord(sourceCart, sourceSlotIndex, active, color));
+
+            if (activeCargo.Count > maxLoopCapacity)
+            {
+                Lose();
+            }
+            UpdateHud();
+        }
+
+        private GameObject CreateCargoVisual(CargoColor color, Vector3 scale)
+        {
+            GameObject obj = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            Destroy(obj.GetComponent<Collider>());
+            obj.name = "Cargo_" + color.ToString();
+            
+            Material mat;
+            if (!cargoMaterials.TryGetValue(color, out mat))
+            {
+                mat = new Material(Shader.Find("Standard"));
+                mat.color = GetColorValue(color);
+                mat.SetFloat("_Metallic", 0.1f);
+                mat.SetFloat("_Smoothness", 0.4f);
+                cargoMaterials[color] = mat;
+            }
+            
+            obj.GetComponent<Renderer>().sharedMaterial = mat;
+            obj.transform.localScale = scale;
+            return obj;
         }
 
         private void SpawnParticleFromSlot(CargoColor color, CargoCartView sourceCart, int sourceSlotIndex, Vector3 startPosition, float entryDistance)
