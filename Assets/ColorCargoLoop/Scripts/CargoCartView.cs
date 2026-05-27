@@ -665,23 +665,39 @@ namespace ColorCargoLoop
                 group.transform.localPosition = s.LocalPosition;
 
                 int count = s.IsFull ? fillThreshold : Mathf.Clamp(s.FillCount, 1, fillThreshold);
-                int cols = 2;
-                int rows = Mathf.CeilToInt(fillThreshold / (float)cols);
-                float cellX = fitScale.x / cols;
-                float cellZ = fitScale.z / Mathf.Max(1, rows);
-                Vector3 miniScale = new Vector3(cellX * 0.96f, fitScale.y * 1.45f, cellZ * 0.96f);
-
-                for (int i = 0; i < count; i++)
+                
+                // FULL slot: single large block
+                if (s.IsFull)
                 {
-                    GameObject mini = game.CreateCargoBlockObject(
+                    GameObject fullBlock = game.CreateCargoBlockObject(
                         s.ClaimedColor.Value,
-                        "Fill_" + i);
-                    mini.transform.SetParent(group.transform, false);
-                    mini.transform.localPosition = GetFillLocalPosition(s, i) - s.LocalPosition + Vector3.up * (miniScale.y * 0.5f);
-                    mini.transform.localScale = miniScale;
+                        "FullBlock");
+                    fullBlock.transform.SetParent(group.transform, false);
+                    fullBlock.transform.localPosition = Vector3.up * (fitScale.y * 0.5f);
+                    fullBlock.transform.localScale = fitScale;
+                    s.FullVisual = group;
                 }
+                else
+                {
+                    // Partially filled: show mini particles
+                    int cols = 2;
+                    int rows = Mathf.CeilToInt(fillThreshold / (float)cols);
+                    float cellX = fitScale.x / cols;
+                    float cellZ = fitScale.z / Mathf.Max(1, rows);
+                    Vector3 miniScale = new Vector3(cellX * 0.96f, fitScale.y * 1.45f, cellZ * 0.96f);
 
-                s.FullVisual = group;
+                    for (int i = 0; i < count; i++)
+                    {
+                        GameObject mini = game.CreateCargoBlockObject(
+                            s.ClaimedColor.Value,
+                            "Fill_" + i);
+                        mini.transform.SetParent(group.transform, false);
+                        mini.transform.localPosition = GetFillLocalPosition(s, i) - s.LocalPosition + Vector3.up * (miniScale.y * 0.5f);
+                        mini.transform.localScale = miniScale;
+                    }
+
+                    s.FullVisual = group;
+                }
             }
             else
             {
