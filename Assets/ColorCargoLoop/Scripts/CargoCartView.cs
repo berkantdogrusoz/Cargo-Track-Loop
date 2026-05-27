@@ -706,9 +706,16 @@ namespace ColorCargoLoop
                 // FULL slot: single large block that fills the entire slot height
                 if (s.IsFull)
                 {
-                    // Dinamik yukseklik hesaplama - kasa tam dolsun
-                    float fullBlockHeight = game.SlotBlockSize.y * fillThreshold * game.CubeStackStep / game.SlotBlockSize.y;
-                    fullBlockHeight = Mathf.Max(fullBlockHeight, game.SlotBlockSize.y * 2.5f);
+                    // Dinamik yukseklik hesaplama - kasa tam dolsun ama tasmasin
+                    // Slot block height * stack count = toplam dolu yukseklik
+                    float fullBlockHeight = game.SlotBlockSize.y * fillThreshold;
+                    
+                    // Grid derinligine gore maksimum yukseklik siniri (kasa disina tasmasin)
+                    float maxAllowedHeight = effectiveGridDepth * 0.85f;
+                    fullBlockHeight = Mathf.Min(fullBlockHeight, maxAllowedHeight);
+                    
+                    // Minimum yükseklik - gorunur olsun
+                    fullBlockHeight = Mathf.Max(fullBlockHeight, game.SlotBlockSize.y * 1.5f);
                     
                     Vector3 fullBlockSize = new Vector3(colStep * 0.98f, fullBlockHeight, rowStep * 0.98f);
                     
