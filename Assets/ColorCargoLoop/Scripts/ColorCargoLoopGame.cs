@@ -72,6 +72,10 @@ namespace ColorCargoLoop
         [SerializeField] private float cargoCollectSpeed = 5.0f;
         [SerializeField] private float cargoCollectTriggerDistance = 0.28f;
 
+        [Header("Vibration")]
+        [Range(0f, 1f)]
+        [SerializeField] private float vibrationStrength = 0.4f;
+
         [Header("Carts")]
         [SerializeField] private bool simpleCenterTruckMode = true;
         [SerializeField] private float cartVerticalSpacing = 2.95f;
@@ -356,6 +360,10 @@ namespace ColorCargoLoop
             {
                 Lose();
             }
+            
+            // Titreşim efekti - tırdan yola düşerken
+            TriggerVibration();
+            
             UpdateHud();
         }
 
@@ -1055,6 +1063,10 @@ namespace ColorCargoLoop
                     }
                 }
             }
+            
+            // Titreşim efekti - yoldan tıra dolarken
+            TriggerVibration();
+            
             Destroy(cargo.Visual);
             UpdateHud();
         }
@@ -2291,6 +2303,16 @@ namespace ColorCargoLoop
             if (undoBadge != null) undoBadge.text = undoCount.ToString();
             if (shuffleBadge != null) shuffleBadge.text = shuffleCount.ToString();
             if (extraBadge != null) extraBadge.text = extraSlotCount.ToString();
+        }
+
+        private void TriggerVibration()
+        {
+            #if UNITY_ANDROID || UNITY_IOS
+            // Titreşim şiddetine göre birden fazla tetikleme yapılabilir ama Unity'nin standart Vibrate() binary
+            // vibrationStrength parametresi ile şiddeti ayarlamak için native plugin gerekir.
+            // Şimdilik her tetiklemede kısa bir titreşim veriyoruz.
+            Handheld.Vibrate();
+            #endif
         }
 
         private void ClearChildren(Transform parent)
