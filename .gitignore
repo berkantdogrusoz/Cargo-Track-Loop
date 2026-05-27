@@ -1,1 +1,62 @@
-Nothing should be ignored based on the provided file changes. The only modified file is a source code file (.cs), which should not be added to .gitignore.
+# Build artifacts
+*.dll
+*.exe
+*.pdb
+*.meta
+*.prefab
+*.unitypackage
+
+# Unity specific
+Library/
+Temp/
+Obj/
+Build/
+Logs/
+MemoryCaptures/
+UserSettings/
+
+# Visual Studio
+.vs/
+*.userprefs
+
+# Rider
+.idea/
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+crashlytics-build.properties
+
+# OS generated
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Icon?
+desktop.ini
+
+# Compressed archives
+*.zip
+*.tar.gz
+*.rar
+*.7z
+*.gz
+*.tar
+*.bz2
+*.xz
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+*.tar.bz2
+*.tar.xz
+*.tar.zst

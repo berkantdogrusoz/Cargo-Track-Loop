@@ -1021,6 +1021,14 @@ namespace ColorCargoLoop
                 float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
                 cart.transform.position = Vector3.Lerp(start, route.PortalMouth, eased);
                 cart.transform.rotation = Quaternion.identity;
+                
+                // Tır portal ağzına yaklaşırken fade-out başlat (son %20'de)
+                float distToPortal = Vector3.Distance(cart.transform.position, route.PortalMouth);
+                float totalDist = Vector3.Distance(start, route.PortalMouth);
+                float fadeStartRatio = 0.25f; // Portal'a uzaklığın %25'inde başla
+                float tunnelAlpha = Mathf.Lerp(1f, 0f, Mathf.Clamp01((fadeStartRatio - (distToPortal / totalDist)) / fadeStartRatio));
+                cart.SetTunnelFade(tunnelAlpha);
+                
                 yield return null;
             }
 
@@ -1030,6 +1038,10 @@ namespace ColorCargoLoop
                 t += Time.deltaTime * 1.9f;
                 float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
                 cart.transform.position = Vector3.Lerp(route.PortalMouth, route.PortalInside, eased);
+                
+                // Tır tünel içinde tamamen görünmez
+                cart.SetTunnelFade(0f);
+                
                 yield return null;
             }
 
@@ -1262,13 +1274,8 @@ namespace ColorCargoLoop
             Destroy(inner.GetComponent<Collider>());
             inner.GetComponent<Renderer>().sharedMaterial = portalInnerMat;
 
-            GameObject tunnelRoof = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            tunnelRoof.name = "TunnelRoof";
-            tunnelRoof.transform.SetParent(portal.transform, false);
-            tunnelRoof.transform.localPosition = new Vector3(0.42f, 0.02f, 0f);
-            tunnelRoof.transform.localScale = new Vector3(0.92f, 0.34f, laneWidth * 1.05f);
-            Destroy(tunnelRoof.GetComponent<Collider>());
-            tunnelRoof.GetComponent<Renderer>().sharedMaterial = portalInnerMat;
+            // TunnelRoof kaldırıldı - artık tırın kendi gövdesi tünel gibi davranacak
+            // Tır tünele girince giren kısım görünmez olacak (fade-out efekti ile)
 
             truckExitRoutes[cart] = new TruckExitRoute
             {

@@ -37,6 +37,8 @@ namespace ColorCargoLoop
         private int fillThreshold = 30;
         private Coroutine punchCoroutine;
 
+        private Renderer[] cachedRenderers; // Tır fade-out için cache'lenmiş renderer'lar
+
         // Grid boyutu - import edilen wagon'a gÃ¶re runtime'da hesaplanÄ±r
         private float effectiveGridWidth = 0.78f;
         private float effectiveGridDepth = 1.45f;
@@ -600,6 +602,41 @@ namespace ColorCargoLoop
             DestroySafe(part.GetComponent<Collider>());
             part.GetComponent<Renderer>().sharedMaterial = material;
             return part;
+        }
+
+        /// <summary>
+        /// Tırın tüm renderer'larını cache'le. Tunnel fade-out efekti için kullanılır.
+        /// </summary>
+        public void CacheRenderers()
+        {
+            cachedRenderers = GetComponentsInChildren<Renderer>();
+        }
+
+        /// <summary>
+        /// Tır tünele girerken alpha fade-out efekti uygula.
+        /// tunnelAlpha: 1 = tam görünür, 0 = tamamen görünmez
+        /// </summary>
+        public void SetTunnelFade(float tunnelAlpha)
+        {
+            if (cachedRenderers == null) CacheRenderers();
+            
+            float actualAlpha = Mathf.Clamp01(tunnelAlpha);
+            for (int i = 0; i < cachedRenderers.Length; i++)
+            {
+                Renderer r = cachedRenderers[i];
+                if (r == null) continue;
+                
+                // Slot grid'deki cargo bloklarını fade-out'a dahil etme
+                if (r.transform.IsChildOf(slotRoot)) continue;
+                
+                Material mat = r.sharedMaterial;
+                if (mat != null)
+                {
+                    Color color = mat.color;
+                    color.a = actualAlpha;
+                    mat.color = color;
+                }
+            }
         }
 
         private bool TryComputeWorldBounds(GameObject root, out Bounds bounds)
