@@ -290,7 +290,8 @@ namespace ColorCargoLoop
 
         private IEnumerator SpawnFrontSequential(CargoCartView cart, List<CargoCartView.ReleasedCube> released)
         {
-            // Artık partikül yağdırmıyoruz, tırda duran BÜYÜK KÜPLERİ tek tek fırlatacağız
+            // Tırda duran BÜYÜK KÜPLERİ tek tek fırlatıyoruz
+            // Küp sayısını korumak için released listesini olduğu gibi kullanıyoruz
             for (int i = 0; i < released.Count; i++)
             {
                 if (state != GameState.Playing) yield break;
@@ -299,43 +300,28 @@ namespace ColorCargoLoop
                 // Tırın içindeki slotun dünya pozisyonunu al
                 Vector3 slotWorldPos = cart.GetSlotWorldPosition(r.SlotIndex);
                 
-                // Tırın içindeki "FullVisual" (büyük küp) objesini bulmaya çalış
-                // CargoCartView içindeki Slot yapısında FullVisual tutuluyor ama public değil
-                // Bu yüzden GetSlotWorldPosition'dan gelen yerden bir küp spawn edip oradan fırlatacağız
-                // YA DA daha iyisi: CargoCartView'a bir metod ekleyip o görseli alacağız.
-                // Şimdilik mevcut yapıda en temiz çözüm: 
-                // Tırın slot pozisyonunda yeni bir "Büyük Küp" oluşturup onu fırlatmak.
-                // Ama sen "tırda zaten duranlar uçsun" dedin. 
-                // O halde CargoCartView içindeki FullVisual'ı erişilebilir yapmalıyız veya oradan hareket ettirmeliyiz.
-                
-                // En garanti yöntem: Tırın slotundaki görseli (varsa) al, yoksa spawn et.
-                // CargoCartView.Slots[r.SlotIndex].FullVisual -> bu private olduğu için erişemiyoruz.
-                // Bu yüzden CargoCartView'a bir getter eklememiz lazım.
-                
-                // HIZLI ÇÖZÜM: Mevcut sistemi "Büyük Küp" mantığına çeviriyoruz.
-                // SpawnParticleFromSlot yerine direkt Büyük Küp fırlatan bir korutin yazıyoruz.
-                
-                Vector3 exitOrigin = slotWorldPos + Vector3.up * 0.2f + Vector3.back * 0.1f;
+                // Slot'un tam üzerinden başla
+                Vector3 exitOrigin = slotWorldPos + Vector3.up * 0.15f;
                 float dockDist = FindNearestPathDistance(exitOrigin);
 
-                // Büyük küpü yarat ve fırlat
+                // Büyük küpü yarat ve fırlat - roadCargoScale ile (oval form korunacak)
                 SpawnBigCargoFromCart(r.Color, cart, r.SlotIndex, exitOrigin, dockDist);
 
                 // Sıradaki küp için kısa bekleme (akıcı döküm efekti)
-                yield return new WaitForSeconds(0.15f);
+                yield return new WaitForSeconds(0.12f);
             }
         }
 
         private void SpawnBigCargoFromCart(CargoColor color, CargoCartView sourceCart, int sourceSlotIndex, Vector3 startPosition, float entryDistance)
         {
             // Yoldaki normal küp boyutunda (roadCargoScale) bir küp oluştur
-            // Küpün oval şeklini korumak için scale değerini doğru uyguluyoruz
+            // Oval şeklin korunması için scale değerini aynen uyguluyoruz
             GameObject cargoObj = CreateCargoVisual(color, roadCargoScale);
             cargoObj.transform.SetParent(cargoRoot, false);
             cargoObj.transform.position = startPosition;
             
-            // Küpün orijinal oval dönüşünü koru (eğer varsa) veya rastgele hafif dönüş ver
-            cargoObj.transform.rotation = Quaternion.Euler(Random.Range(0f, 20f), Random.Range(0f, 360f), Random.Range(0f, 20f));
+            // Hafif rastgele dönüş ver ki doğal görünsün
+            cargoObj.transform.rotation = Quaternion.Euler(Random.Range(0f, 15f), Random.Range(0f, 360f), Random.Range(0f, 15f));
 
             var active = new ActiveCargo
             {
@@ -348,12 +334,12 @@ namespace ColorCargoLoop
                 FlyStart = startPosition,
                 FlyTarget = GetCargoRoadPosition(entryDistance),
                 FlyProgress = 0f,
-                BaseScale = roadCargoScale, // Normal küp boyutu
+                BaseScale = roadCargoScale, // Normal küp boyutu (oval)
                 SourceCart = sourceCart,
                 SourceColumn = sourceSlotIndex,
                 TumbleAxis = Random.onUnitSphere,
-                TumbleSpeed = Random.Range(180f, 360f),
-                LaneOffset = Random.Range(-0.1f, 0.1f), // Daha az saçılma
+                TumbleSpeed = Random.Range(200f, 400f),
+                LaneOffset = Random.Range(-0.08f, 0.08f), // Çok az saçılma
                 VerticalOffset = 0f
             };
             activeCargo.Add(active);
@@ -364,7 +350,7 @@ namespace ColorCargoLoop
                 Lose();
             }
             
-            // Titreşim efekti - tırdan yola düşerken
+            // Titreşim efekti - tırdan yola düşerken hafif
             TriggerVibration();
             
             UpdateHud();
