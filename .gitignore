@@ -3,34 +3,41 @@
 *.dll
 *.exe
 *.pdb
+*.meta
 *.unitypackage
 
-# Dependencies
-Packages/
+# Unity specific
 Library/
 Temp/
 Obj/
+Build/
+Builds/
+*.unityproj
+*.sln
+*.csproj
+*.user
+*.userprefs
+*.pidb
+*.booproj
+*.svd
+*.cache
+*.lock
 
 # Logs
 *.log
 
-# User-specific files
-.vs/
-*.userprefs
-.sln.docstates
-
 # Environment
 .env
 .env.local
-*.env.*
+.env.*
 
-# Compressed files
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
+# Dependencies
+Packages/
+node_modules/
+
+# Editors
+.vscode/
+.idea/
+*.swp
+*.swo
 ```

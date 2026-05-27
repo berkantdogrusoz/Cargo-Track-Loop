@@ -119,6 +119,7 @@ namespace ColorCargoLoop
         public int ColumnCapacityPerCart { get { return columnCapacityPerCart; } }
         public float CartGridWidth { get { return cartGridWidth; } }
         public float CartGridDepth { get { return cartGridDepth; } }
+        public float CartHeightY { get { return cartHeightY; } } // Tır kasa yüksekliği
         public Vector3 SlotBlockSize { get { return slotBlockSize; } }
         public int ParticlesPerTap { get { return particlesPerTap; } }
         public int SlotFillThreshold { get { return slotFillThreshold; } }

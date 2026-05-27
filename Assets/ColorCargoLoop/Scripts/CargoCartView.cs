@@ -707,15 +707,23 @@ namespace ColorCargoLoop
                 if (s.IsFull)
                 {
                     // Dinamik yukseklik hesaplama - kasa tam dolsun ama tasmasin
+                    // KASA YUKSEKLIGI ILE ESLESTIRME: cartHeightY degerini baz al
+                    float targetCartHeight = game.CartHeightY; // Inspector'daki cartHeightY degeri
+                    
                     // Slot block height * stack count = toplam dolu yukseklik
-                    float fullBlockHeight = game.SlotBlockSize.y * fillThreshold;
+                    float stackedHeight = game.SlotBlockSize.y * fillThreshold;
+                    
+                    // Hedef: ya stackedHeight YA DA cartHeightY (hangisi uygunsa)
+                    // Ama grid derinligini asmasin
+                    float fullBlockHeight = Mathf.Max(stackedHeight, targetCartHeight * 0.8f);
                     
                     // Grid derinligine gore maksimum yukseklik siniri (kasa disina tasmasin)
-                    float maxAllowedHeight = effectiveGridDepth * 0.85f;
+                    float maxAllowedHeight = effectiveGridDepth * 0.9f;
                     fullBlockHeight = Mathf.Min(fullBlockHeight, maxAllowedHeight);
                     
-                    // Minimum yükseklik - gorunur olsun
-                    fullBlockHeight = Mathf.Max(fullBlockHeight, game.SlotBlockSize.y * 1.5f);
+                    // Minimum yükseklik - gorunur olsun, cartHeightY'nin en az %70'i kadar
+                    float minHeight = targetCartHeight * 0.7f;
+                    fullBlockHeight = Mathf.Max(fullBlockHeight, minHeight);
                     
                     Vector3 fullBlockSize = new Vector3(colStep * 0.98f, fullBlockHeight, rowStep * 0.98f);
                     
@@ -726,6 +734,8 @@ namespace ColorCargoLoop
                     fullBlock.transform.localPosition = Vector3.up * (fullBlockSize.y * 0.5f);
                     fullBlock.transform.localScale = fullBlockSize;
                     s.FullVisual = group;
+                    
+                    Debug.Log($"[CART VISUAL] Slot {slotIndex} FULL -> Height: {fullBlockHeight:F3} (cartHeightY: {targetCartHeight}, stacked: {stackedHeight:F3}, min: {minHeight:F3}, max: {maxAllowedHeight:F3})");
                 }
                 else
                 {
