@@ -329,10 +329,13 @@ namespace ColorCargoLoop
         private void SpawnBigCargoFromCart(CargoColor color, CargoCartView sourceCart, int sourceSlotIndex, Vector3 startPosition, float entryDistance)
         {
             // Yoldaki normal küp boyutunda (roadCargoScale) bir küp oluştur
+            // Küpün oval şeklini korumak için scale değerini doğru uyguluyoruz
             GameObject cargoObj = CreateCargoVisual(color, roadCargoScale);
             cargoObj.transform.SetParent(cargoRoot, false);
             cargoObj.transform.position = startPosition;
-            cargoObj.transform.rotation = Quaternion.identity;
+            
+            // Küpün orijinal oval dönüşünü koru (eğer varsa) veya rastgele hafif dönüş ver
+            cargoObj.transform.rotation = Quaternion.Euler(Random.Range(0f, 20f), Random.Range(0f, 360f), Random.Range(0f, 20f));
 
             var active = new ActiveCargo
             {
