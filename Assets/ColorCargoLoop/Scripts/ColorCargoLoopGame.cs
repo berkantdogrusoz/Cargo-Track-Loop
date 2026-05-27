@@ -53,6 +53,7 @@ namespace ColorCargoLoop
         [SerializeField] private Color cameraBackground = new Color(0.085f, 0.06f, 0.18f);
         [SerializeField] private Color floorColor = new Color(0.135f, 0.10f, 0.30f);
         [SerializeField] private float orthographicSize = 7.4f;
+        [SerializeField] private float orthographicSizePerCart = 1.85f; // Her tır için ek kamera genişliği
 
         [Header("Track")]
         [SerializeField] private Color trackColor = new Color(0.40f, 0.27f, 0.78f);
@@ -1014,37 +1015,29 @@ namespace ColorCargoLoop
                 };
             }
 
+            // Tırı portal ağzına kadar akıcı hareket ettir (tek seferde, kesintisiz)
             float t = 0f;
             while (t < 1f)
             {
-                t += Time.deltaTime * 1.45f;
+                t += Time.deltaTime * 2.8f; // Hızlı ve akıcı hareket
                 float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
                 cart.transform.position = Vector3.Lerp(start, route.PortalMouth, eased);
                 cart.transform.rotation = Quaternion.identity;
                 
-                // Tır portal ağzına yaklaşırken fade-out başlat (son %20'de)
+                // Tır portal ağzına yaklaşırken fade-out başlat (son %30'da)
                 float distToPortal = Vector3.Distance(cart.transform.position, route.PortalMouth);
                 float totalDist = Vector3.Distance(start, route.PortalMouth);
-                float fadeStartRatio = 0.25f; // Portal'a uzaklığın %25'inde başla
+                float fadeStartRatio = 0.35f; // Portal'a uzaklığın %35'inde başla
                 float tunnelAlpha = Mathf.Lerp(1f, 0f, Mathf.Clamp01((fadeStartRatio - (distToPortal / totalDist)) / fadeStartRatio));
                 cart.SetTunnelFade(tunnelAlpha);
                 
                 yield return null;
             }
 
-            t = 0f;
-            while (t < 1f)
-            {
-                t += Time.deltaTime * 1.9f;
-                float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
-                cart.transform.position = Vector3.Lerp(route.PortalMouth, route.PortalInside, eased);
-                
-                // Tır tünel içinde tamamen görünmez
-                cart.SetTunnelFade(0f);
-                
-                yield return null;
-            }
-
+            // Tır portal ağzında tamamen görünmez olana kadar bekle
+            cart.SetTunnelFade(0f);
+            
+            // Hemen popup yap ve yok et (tünel içine girmeden)
             cart.gameObject.SetActive(false);
             UpdateHud();
 
@@ -1815,8 +1808,14 @@ namespace ColorCargoLoop
             }
 
             mainCamera.orthographic = true;
-            mainCamera.orthographicSize = orthographicSize;
-            mainCamera.transform.position = new Vector3(0f, 12.0f, -5.0f);
+            // Kamera boyutunu tır sayısına göre dinamik ayarla
+            int cartCount = currentLevel != null ? currentLevel.Carts.Count : 1;
+            float dynamicOrthoSize = orthographicSize + (cartCount - 1) * orthographicSizePerCart;
+            mainCamera.orthographicSize = dynamicOrthoSize;
+            
+            // Kamerayı tırların merkezine hizala
+            float totalSpan = (cartCount - 1) * cartVerticalSpacing;
+            mainCamera.transform.position = new Vector3(0f, 12.0f + cartCount * 0.3f, -5.0f - cartCount * 0.2f);
             mainCamera.transform.rotation = Quaternion.Euler(62f, 0f, 0f);
             mainCamera.clearFlags = CameraClearFlags.SolidColor;
             // Background ile floor aynÄ± renk â†’ tek tip zemin gÃ¶rÃ¼nÃ¼mÃ¼
@@ -1839,7 +1838,11 @@ namespace ColorCargoLoop
             floor.transform.SetParent(runtimeRoot, false);
             floor.transform.position = new Vector3(0f, -0.18f, 0f);
             // Tek bÃ¼yÃ¼k plaka - tÃ¼m gÃ¶rÃ¼nÃ¼r alanÄ± kapla, kamera background ile renk eÅŸit
-            floor.transform.localScale = new Vector3(60f, 0.1f, 90f);
+            int cartCountForFloor = currentLevel != null ? currentLevel.Carts.Count : 1;
+            float totalSpanForFloor = (cartCountForFloor - 1) * cartVerticalSpacing;
+            float floorWidth = Mathf.Max(60f, trackWidthX * 3f + cartCountForFloor * cartVerticalSpacing * 2f);
+            float floorLength = Mathf.Max(90f, totalSpanForFloor * 3f);
+            floor.transform.localScale = new Vector3(floorWidth, 0.1f, floorLength);
             Destroy(floor.GetComponent<Collider>());
             Renderer floorRenderer = floor.GetComponent<Renderer>();
             if (floorRenderer != null)
