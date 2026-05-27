@@ -1,3 +1,4 @@
+```
 # Build artifacts
 *.dll
 *.exe
@@ -6,21 +7,19 @@
 *.prefab
 *.unitypackage
 
-# Unity specific
+# Dependencies
+Packages/
+ProjectSettings/
+
+# Temp files
+*.tmp
+*.temp
+*.cache
+
+# User-specific
+UserSettings/
 Library/
 Temp/
-Obj/
-Build/
-Logs/
-MemoryCaptures/
-UserSettings/
-
-# Visual Studio
-.vs/
-*.userprefs
-
-# Rider
-.idea/
 
 # Environment
 .env
@@ -29,34 +28,8 @@ UserSettings/
 
 # Logs
 *.log
-crashlytics-build.properties
 
 # OS generated
 .DS_Store
 Thumbs.db
-ehthumbs.db
-Icon?
-desktop.ini
-
-# Compressed archives
-*.zip
-*.tar.gz
-*.rar
-*.7z
-*.gz
-*.tar
-*.bz2
-*.xz
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+```

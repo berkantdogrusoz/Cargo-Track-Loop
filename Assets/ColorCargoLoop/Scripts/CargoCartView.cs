@@ -703,15 +703,21 @@ namespace ColorCargoLoop
 
                 int count = s.IsFull ? fillThreshold : Mathf.Clamp(s.FillCount, 1, fillThreshold);
                 
-                // FULL slot: single large block
+                // FULL slot: single large block that fills the entire slot height
                 if (s.IsFull)
                 {
+                    // Dinamik yukseklik hesaplama - kasa tam dolsun
+                    float fullBlockHeight = game.SlotBlockSize.y * fillThreshold * game.CubeStackStep / game.SlotBlockSize.y;
+                    fullBlockHeight = Mathf.Max(fullBlockHeight, game.SlotBlockSize.y * 2.5f);
+                    
+                    Vector3 fullBlockSize = new Vector3(colStep * 0.98f, fullBlockHeight, rowStep * 0.98f);
+                    
                     GameObject fullBlock = game.CreateCargoBlockObject(
                         s.ClaimedColor.Value,
                         "FullBlock");
                     fullBlock.transform.SetParent(group.transform, false);
-                    fullBlock.transform.localPosition = Vector3.up * (fitScale.y * 0.5f);
-                    fullBlock.transform.localScale = fitScale;
+                    fullBlock.transform.localPosition = Vector3.up * (fullBlockSize.y * 0.5f);
+                    fullBlock.transform.localScale = fullBlockSize;
                     s.FullVisual = group;
                 }
                 else
