@@ -703,60 +703,40 @@ namespace ColorCargoLoop
 
                 int count = s.IsFull ? fillThreshold : Mathf.Clamp(s.FillCount, 1, fillThreshold);
                 
-                // FULL slot: single large block that fills the entire slot height
+                // HER ZAMAN tek tek kup goster - stack halinde dizilmis
+                // FULL slot bile tek blok degil, stack edilmis bireysel kupler
+                float cubeHeight = game.SlotBlockSize.y;
+                float totalStackHeight = cubeHeight * fillThreshold;
+                
+                // Kasa yuksekligi ile esitleme
+                float maxAllowedHeight = effectiveGridDepth * 0.85f;
+                
+                // Kup yuksekligini kasa yuksekligine gore ayarla
+                if (totalStackHeight > maxAllowedHeight)
+                {
+                    cubeHeight = maxAllowedHeight / fillThreshold;
+                }
+                
+                Vector3 cubeScale = new Vector3(colStep * 0.97f, cubeHeight, rowStep * 0.97f);
+
+                for (int i = 0; i < count; i++)
+                {
+                    GameObject cube = game.CreateCargoBlockObject(
+                        s.ClaimedColor.Value,
+                        "Cube_" + i);
+                    cube.transform.SetParent(group.transform, false);
+                    
+                    // Cupu stack icinde konumlandir (alttan yukariya)
+                    float yPos = cubeHeight * 0.5f + cubeHeight * i;
+                    cube.transform.localPosition = new Vector3(0f, yPos, 0f);
+                    cube.transform.localScale = cubeScale;
+                }
+                
+                s.FullVisual = group;
+                
                 if (s.IsFull)
                 {
-                    // Dinamik yukseklik hesaplama - kasa tam dolsun ama tasmasin
-                    // KASA YUKSEKLIGI ILE ESLESTIRME: cartHeightY degerini baz al
-                    float targetCartHeight = game.CartHeightY; // Inspector'daki cartHeightY degeri
-                    
-                    // Slot block height * stack count = toplam dolu yukseklik
-                    float stackedHeight = game.SlotBlockSize.y * fillThreshold;
-                    
-                    // Hedef: ya stackedHeight YA DA cartHeightY (hangisi uygunsa)
-                    // Ama grid derinligini asmasin
-                    float fullBlockHeight = Mathf.Max(stackedHeight, targetCartHeight * 0.8f);
-                    
-                    // Grid derinligine gore maksimum yukseklik siniri (kasa disina tasmasin)
-                    float maxAllowedHeight = effectiveGridDepth * 0.9f;
-                    fullBlockHeight = Mathf.Min(fullBlockHeight, maxAllowedHeight);
-                    
-                    // Minimum yükseklik - gorunur olsun, cartHeightY'nin en az %70'i kadar
-                    float minHeight = targetCartHeight * 0.7f;
-                    fullBlockHeight = Mathf.Max(fullBlockHeight, minHeight);
-                    
-                    Vector3 fullBlockSize = new Vector3(colStep * 0.98f, fullBlockHeight, rowStep * 0.98f);
-                    
-                    GameObject fullBlock = game.CreateCargoBlockObject(
-                        s.ClaimedColor.Value,
-                        "FullBlock");
-                    fullBlock.transform.SetParent(group.transform, false);
-                    fullBlock.transform.localPosition = Vector3.up * (fullBlockSize.y * 0.5f);
-                    fullBlock.transform.localScale = fullBlockSize;
-                    s.FullVisual = group;
-                    
-                    Debug.Log($"[CART VISUAL] Slot {slotIndex} FULL -> Height: {fullBlockHeight:F3} (cartHeightY: {targetCartHeight}, stacked: {stackedHeight:F3}, min: {minHeight:F3}, max: {maxAllowedHeight:F3})");
-                }
-                else
-                {
-                    // Partially filled: show mini particles
-                    int cols = 2;
-                    int rows = Mathf.CeilToInt(fillThreshold / (float)cols);
-                    float cellX = fitScale.x / cols;
-                    float cellZ = fitScale.z / Mathf.Max(1, rows);
-                    Vector3 miniScale = new Vector3(cellX * 0.96f, fitScale.y * 1.45f, cellZ * 0.96f);
-
-                    for (int i = 0; i < count; i++)
-                    {
-                        GameObject mini = game.CreateCargoBlockObject(
-                            s.ClaimedColor.Value,
-                            "Fill_" + i);
-                        mini.transform.SetParent(group.transform, false);
-                        mini.transform.localPosition = GetFillLocalPosition(s, i) - s.LocalPosition + Vector3.up * (miniScale.y * 0.5f);
-                        mini.transform.localScale = miniScale;
-                    }
-
-                    s.FullVisual = group;
+                    Debug.Log($"[CART VISUAL] Slot {slotIndex} FULL -> {count} individual cubes stacked, each height: {cubeHeight:F3}, total: {totalStackHeight:F3}");
                 }
             }
             else
