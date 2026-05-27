@@ -76,7 +76,7 @@ namespace ColorCargoLoop
         [SerializeField] private bool simpleCenterTruckMode = true;
         [SerializeField] private float cartVerticalSpacing = 2.95f;
         [SerializeField] private float cartCenterOffsetX = 0f;
-        [SerializeField] private float cartHeightY = 0.05f;
+        [SerializeField] private float cartHeightY = 0.03f; // Kasa yüksekliği %40 azaltıldı (eski: 0.05f)
 
         [Header("Cargo Slot Layout (in cart)")]
         [SerializeField] private Vector3 inSlotCargoScale = new Vector3(0.18f, 0.18f, 0.18f);
