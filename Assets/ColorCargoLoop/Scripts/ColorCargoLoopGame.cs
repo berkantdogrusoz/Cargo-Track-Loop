@@ -134,7 +134,8 @@ namespace ColorCargoLoop
         private readonly Dictionary<CargoColor, Material> cargoMaterials = new Dictionary<CargoColor, Material>();
         private readonly HashSet<CargoCartView> completedCarts = new HashSet<CargoCartView>();
         private readonly Dictionary<CargoCartView, TruckExitRoute> truckExitRoutes = new Dictionary<CargoCartView, TruckExitRoute>();
-        private readonly List<float> cartPickupDistances = new List<float>(); // Her cart iÃ§in path Ã¼stÃ¼ndeki en yakÄ±n nokta
+        private readonly List<float> cartPickupDistances = new List<float>(); // Her cart iÃ§in path Ã¼stÃ¼ndeki en yakÄ±n nokta (REAR/back tarafi)
+        private readonly List<float> cartHeadPickupDistances = new List<float>(); // CALISAN SISTEM: ek pickup noktasi (HEAD/sag tarafi) - 2-yon dolma
         private readonly List<AnimatedFlowMarker> flowMarkers = new List<AnimatedFlowMarker>(); // Yolda akan oklar
 
         [Header("Road Flow Animation")]
@@ -297,10 +298,18 @@ namespace ColorCargoLoop
                 if (state != GameState.Playing) yield break;
                 var r = released[i];
 
-                for (int p = 0; p < particlesPerSlot; p++)
+                // CALISAN SISTEM: bu slotu simdi bosalt (sirayla gorsel)
+                cart.EmptySlot(r.SlotIndex);
+
+                // CALISAN SISTEM: 2'ser 2'ser ucma - her dalga 2 kup birden
+                for (int p = 0; p < particlesPerSlot; p += 2)
                 {
                     if (state != GameState.Playing) yield break;
                     SpawnParticle(r.Color, cart, r.SlotIndex, sharedExitOrigin, dockDist);
+                    if (p + 1 < particlesPerSlot)
+                    {
+                        SpawnParticle(r.Color, cart, r.SlotIndex, sharedExitOrigin, dockDist);
+                    }
                     if (particleBurstStagger > 0f)
                     {
                         yield return new WaitForSeconds(particleBurstStagger);
@@ -867,9 +876,12 @@ namespace ColorCargoLoop
             // uygun deÄŸilse devam eder, sonraki tÄ±rÄ±n yanÄ±na gelince yeniden kontrol.
             for (int i = 0; i < carts.Count && i < cartPickupDistances.Count; i++)
             {
-                float pickup = cartPickupDistances[i];
-                // Bu frame'de pickup noktasÄ±nÄ± geÃ§ti mi?
-                if (!path.DidCross(cargo.PreviousDistance, cargo.Distance, pickup)) continue;
+                // CALISAN SISTEM: 2-yon dolma - hem rear hem head pickup noktasini kontrol et
+                float rearPickup = cartPickupDistances[i];
+                float headPickup = (i < cartHeadPickupDistances.Count) ? cartHeadPickupDistances[i] : rearPickup;
+                bool crossedRear = path.DidCross(cargo.PreviousDistance, cargo.Distance, rearPickup);
+                bool crossedHead = path.DidCross(cargo.PreviousDistance, cargo.Distance, headPickup);
+                if (!crossedRear && !crossedHead) continue;
 
                 CargoCartView candidate = carts[i];
                 if (completedCarts.Contains(candidate)) continue;
@@ -1097,6 +1109,7 @@ namespace ColorCargoLoop
             completedCarts.Clear();
             truckExitRoutes.Clear();
             cartPickupDistances.Clear();
+            cartHeadPickupDistances.Clear();
 
             BuildPathAndTrack();
             BuildCarts(currentLevel);
@@ -1105,8 +1118,11 @@ namespace ColorCargoLoop
             // KÃ¼p ancak bu noktadan geÃ§ince landing kontrolÃ¼ yapÄ±lÄ±r
             for (int i = 0; i < carts.Count; i++)
             {
-                float d = FindNearestPathDistance(carts[i].transform.position);
-                cartPickupDistances.Add(d);
+                // CALISAN SISTEM: 2 pickup nokta - REAR (back) ve HEAD (sag)
+                float dRear = FindNearestPathDistance(carts[i].GetRearExitPoint());
+                float dHead = FindNearestPathDistance(carts[i].GetHeadEntryPoint());
+                cartPickupDistances.Add(dRear);
+                cartHeadPickupDistances.Add(dHead);
             }
 
             state = GameState.Playing;
@@ -1157,14 +1173,23 @@ namespace ColorCargoLoop
             int cartCount = level.Carts.Count;
             if (cartCount == 0) return;
 
+            // CALISAN SISTEM: auto-spacing - loop derinligi cartCount'a bolunur
+            // Inner loop alani = trackDepthZ - 2 * (trackCornerRadius + buffer)
+            float innerDepth = Mathf.Max(2f, trackDepthZ - (trackCornerRadius * 2f) - 1.6f);
+            float autoSpacing = (cartCount > 1) ? (innerDepth / cartCount) : innerDepth;
+            float useSpacing = Mathf.Min(cartVerticalSpacing, Mathf.Max(0.5f, autoSpacing));
+
             // Coklu cart - dikey istif (cart uzun ekseni Z yonunde)
-            float totalSpan = (cartCount - 1) * cartVerticalSpacing;
+            float totalSpan = (cartCount - 1) * useSpacing;
             float startZ = totalSpan * 0.5f;
+
+            // Per-level camera ayari - loop boyutuna gore ortho size
+            AdjustCameraForLevel();
 
             for (int i = 0; i < cartCount; i++)
             {
                 RuntimeCart cartData = level.Carts[i];
-                Vector3 position = new Vector3(cartCenterOffsetX, cartHeightY, startZ - i * cartVerticalSpacing);
+                Vector3 position = new Vector3(cartCenterOffsetX, cartHeightY, startZ - i * useSpacing);
 
                 GameObject cartObject = new GameObject("Cart_" + (i + 1));
                 cartObject.transform.SetParent(cartRoot, false);
@@ -1181,6 +1206,17 @@ namespace ColorCargoLoop
                 carts.Add(view);
                 BuildTruckExitRoute(view);
             }
+        }
+
+        /// <summary>
+        /// CALISAN SISTEM: cart sayisina gore ortho size, levellar arasi smooth zoom
+        /// </summary>
+        private void AdjustCameraForLevel()
+        {
+            if (mainCamera == null) return;
+            int cartCount = currentLevel != null ? currentLevel.Carts.Count : 1;
+            float targetSize = orthographicSize + Mathf.Max(0, cartCount - 1) * 0.5f;
+            mainCamera.orthographicSize = targetSize;
         }
 
         private void BuildTruckExitRoute(CargoCartView cart)
@@ -1206,76 +1242,14 @@ namespace ColorCargoLoop
             Vector3 portalMouth = new Vector3(portalX, cartHeightY + 0.04f, basePos.z);
             Vector3 portalInside = portalMouth + Vector3.right * 1.15f;
 
-            Material laneMat = GetRuntimeMaterial("TruckExitLane", new Color(0.18f, 0.17f, 0.22f));
-            Material laneEdgeMat = GetEmissiveMaterial("TruckExitEdge", new Color(0.66f, 0.63f, 0.82f), new Color(0.34f, 0.27f, 0.95f), 0.7f);
-            Material portalOuterMat = GetRuntimeMaterial("TruckPortalOuter", new Color(0.58f, 0.46f, 0.92f));
-            Material portalInnerMat = GetRuntimeMaterial("TruckPortalInner", new Color(0.055f, 0.045f, 0.085f));
-
-            GameObject routeRoot = new GameObject("TruckExitRoute_" + cart.CartIndex);
-            routeRoot.transform.SetParent(trackRoot, false);
-
-            CreateRoundedGroundStrip(
-                routeRoot.transform,
-                "ExitLane",
-                new Vector3(laneStartX + laneLength * 0.5f, basePos.y, basePos.z),
-                laneLength,
-                laneWidth,
-                0.055f,
-                laneMat);
-
-            CreateRoundedGroundStrip(
-                routeRoot.transform,
-                "ExitLaneOuterGlow",
-                new Vector3(laneStartX + laneLength * 0.5f, basePos.y, basePos.z),
-                laneLength + 0.12f,
-                laneWidth + 0.16f,
-                0.045f,
-                laneEdgeMat);
-
-            routeRoot.transform.Find("ExitLaneOuterGlow").SetAsFirstSibling();
-
-            GameObject portal = new GameObject("TruckPortal_" + cart.CartIndex);
-            portal.transform.SetParent(routeRoot.transform, false);
-            portal.transform.position = portalMouth + Vector3.up * 0.18f;
-            portal.transform.rotation = Quaternion.identity;
-
-            GameObject outer = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            outer.name = "PortalOuter";
-            outer.transform.SetParent(portal.transform, false);
-            outer.transform.localScale = new Vector3(0.24f, 0.42f, laneWidth * 1.26f);
-            Destroy(outer.GetComponent<Collider>());
-            outer.GetComponent<Renderer>().sharedMaterial = portalOuterMat;
-
-            GameObject top = GameObject.CreatePrimitive(PrimitiveType.Sphere);
-            top.name = "PortalOvalTop";
-            top.transform.SetParent(portal.transform, false);
-            top.transform.localPosition = new Vector3(0f, 0.20f, 0f);
-            top.transform.localScale = new Vector3(0.26f, 0.20f, laneWidth * 1.28f);
-            Destroy(top.GetComponent<Collider>());
-            top.GetComponent<Renderer>().sharedMaterial = portalOuterMat;
-
-            GameObject inner = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            inner.name = "PortalDarkMouth";
-            inner.transform.SetParent(portal.transform, false);
-            inner.transform.localPosition = new Vector3(-0.025f, 0.01f, 0f);
-            inner.transform.localScale = new Vector3(0.26f, 0.30f, laneWidth * 0.92f);
-            Destroy(inner.GetComponent<Collider>());
-            inner.GetComponent<Renderer>().sharedMaterial = portalInnerMat;
-
-            GameObject tunnelRoof = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            tunnelRoof.name = "TunnelRoof";
-            tunnelRoof.transform.SetParent(portal.transform, false);
-            tunnelRoof.transform.localPosition = new Vector3(0.42f, 0.02f, 0f);
-            tunnelRoof.transform.localScale = new Vector3(0.92f, 0.34f, laneWidth * 1.05f);
-            Destroy(tunnelRoof.GetComponent<Collider>());
-            tunnelRoof.GetComponent<Renderer>().sharedMaterial = portalInnerMat;
-
+            // CALISAN SISTEM: siyah/mor lane ve portal GORSELLERI KALDIRILDI
+            // Sadece route logic kaydedilir (cart kazaninca portal'a dogru hareket icin)
             truckExitRoutes[cart] = new TruckExitRoute
             {
                 Start = start,
                 PortalMouth = portalMouth,
                 PortalInside = portalInside,
-                Portal = portal
+                Portal = null
             };
         }
 

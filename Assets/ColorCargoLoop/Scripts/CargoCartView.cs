@@ -156,11 +156,8 @@ namespace ColorCargoLoop
 
         public List<ReleasedCube> ReleaseAllFront()
         {
+            // CALISAN SISTEM: slot'lar hemen bosalmaz - SpawnFrontBurst sirayla bosaltir
             var released = FindFrontReleaseGroup();
-            for (int i = 0; i < released.Count; i++)
-            {
-                EmptySlot(released[i].SlotIndex);
-            }
             if (released.Count > 0) Punch(1.12f);
             else Punch(0.96f);
             return released;
@@ -330,6 +327,12 @@ namespace ColorCargoLoop
         {
             // Prototype trucks face right in screen space; cargo always exits from the rear/bed tail.
             return transform.position + Vector3.left * (effectiveGridDepth * 0.52f) + Vector3.up * 0.52f;
+        }
+
+        public Vector3 GetHeadEntryPoint()
+        {
+            // CALISAN SISTEM: tirin kafa tarafi (sag yon) - kupler bu noktadan da iner
+            return transform.position + Vector3.right * (effectiveGridDepth * 0.52f) + Vector3.up * 0.52f;
         }
 
         public bool TryGetVisualBounds(out Bounds bounds)
@@ -658,42 +661,22 @@ namespace ColorCargoLoop
             // 0.99 ile Ã§ok kÃ¼Ã§Ã¼k gap (z-fighting Ã¶nlemek iÃ§in ama gÃ¶rsel olarak bitiÅŸik)
             Vector3 fitScale = new Vector3(colStep * 0.99f, game.SlotBlockSize.y, rowStep * 0.99f);
 
-            if (s.ClaimedColor.HasValue && (s.FillCount > 0 || s.IsFull))
+            if (s.IsFull && s.ClaimedColor.HasValue)
             {
-                GameObject group = new GameObject("Slot_" + slotIndex + "_Cargo_" + s.ClaimedColor.Value);
-                group.transform.SetParent(slotRoot, false);
-                group.transform.localPosition = s.LocalPosition;
-
-                int count = s.IsFull ? fillThreshold : Mathf.Clamp(s.FillCount, 1, fillThreshold);
-                int cols = 2;
-                int rows = Mathf.CeilToInt(fillThreshold / (float)cols);
-                float cellX = fitScale.x / cols;
-                float cellZ = fitScale.z / Mathf.Max(1, rows);
-                Vector3 miniScale = new Vector3(cellX * 0.96f, fitScale.y * 1.45f, cellZ * 0.96f);
-
-                for (int i = 0; i < count; i++)
-                {
-                    GameObject mini = game.CreateCargoBlockObject(
-                        s.ClaimedColor.Value,
-                        "Fill_" + i);
-                    mini.transform.SetParent(group.transform, false);
-                    mini.transform.localPosition = GetFillLocalPosition(s, i) - s.LocalPosition + Vector3.up * (miniScale.y * 0.5f);
-                    mini.transform.localScale = miniScale;
-                }
-
-                s.FullVisual = group;
+                // CALISAN SISTEM: tek cell-fit cube, kalin gorunum
+                GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                cube.name = "Slot_" + slotIndex + "_Full_" + s.ClaimedColor.Value;
+                cube.transform.SetParent(slotRoot, false);
+                cube.transform.localPosition = s.LocalPosition + new Vector3(0f, game.SlotBlockSize.y * 0.5f, 0f);
+                cube.transform.localScale = new Vector3(fitScale.x * 0.95f, fitScale.y, fitScale.z * 0.95f);
+                DestroySafe(cube.GetComponent<Collider>());
+                cube.GetComponent<Renderer>().sharedMaterial = game.GetCargoMaterial(s.ClaimedColor.Value);
+                s.FullVisual = cube;
             }
             else
             {
-                // BoÅŸ slot - koyu mini taban (boÅŸluk hissi)
-                GameObject pad = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                pad.name = "Slot_" + slotIndex + "_Empty";
-                pad.transform.SetParent(slotRoot, false);
-                pad.transform.localPosition = s.LocalPosition + new Vector3(0f, 0.02f, 0f);
-                pad.transform.localScale = new Vector3(fitScale.x * 0.96f, 0.04f, fitScale.z * 0.96f);
-                DestroySafe(pad.GetComponent<Collider>());
-                pad.GetComponent<Renderer>().sharedMaterial = game.GetRuntimeMaterial("EmptySlot", new Color(0.20f, 0.14f, 0.42f));
-                s.FullVisual = pad;
+                // SLOT BOS: GORUNMEZ (siyah/mor paca kaldirildi)
+                s.FullVisual = null;
             }
         }
 

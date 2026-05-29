@@ -175,13 +175,13 @@ MonoBehaviour:
   cameraBackground: {r: 1, g: 1, b: 1, a: 1}
   floorColor: {r: 0.5188679, g: 0.17377181, b: 0.17377181, a: 1}
   orthographicSize: 8.6
-  trackColor: {r: 1, g: 1, b: 1, a: 1}
+  trackColor: {r: 0.8396226, g: 0.14653791, b: 0.14653791, a: 1}
   laneColor: {r: 1, g: 1, b: 1, a: 1}
   railColor: {r: 1, g: 1, b: 1, a: 1}
   trackWidthX: 6
   trackDepthZ: 10.4
   trackCornerRadius: 2
-  roadCargoScale: {x: 0.37, y: 0.3, z: 0.37}
+  roadCargoScale: {x: 0.2, y: 0.2, z: 0.2}
   cargoEnterFlightSpeed: 1.55
   cargoRoadSpinSpeed: 0
   cargoPathSpacing: 0.58
@@ -192,7 +192,7 @@ MonoBehaviour:
   cartVerticalSpacing: 2.95
   cartCenterOffsetX: 0
   cartHeightY: 0.05
-  inSlotCargoScale: {x: 0.18, y: 0.18, z: 0.18}
+  inSlotCargoScale: {x: 1, y: 0.5, z: 1}
   inSlotColumnStep: 0.38
   inSlotRowStep: 0.36
   cubeStackStep: 0.17
@@ -201,11 +201,11 @@ MonoBehaviour:
   addAccentFlagOnImportedModel: 1
   columnCapacityPerCart: 6
   cartGridWidth: 0.4
-  cartGridDepth: 2.0
-  slotBlockSize: {x: 0.32, y: 0.22, z: 0.11}
+  cartGridDepth: 2
+  slotBlockSize: {x: 0.5, y: 0.5, z: 0.5}
   particlesPerTap: 8
   slotFillThreshold: 8
-  particleSize: 0.1
+  particleSize: 0.03
   particleBurstStagger: 0.035
   particleSpacing: 0.26
   undoStartCount: 3
