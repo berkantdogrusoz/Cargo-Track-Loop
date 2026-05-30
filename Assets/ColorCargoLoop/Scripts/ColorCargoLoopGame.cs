@@ -363,10 +363,8 @@ namespace ColorCargoLoop
             activeCargo.Add(active);
             releaseHistory.Add(new ReleaseRecord(sourceCart, sourceSlotIndex, active, color));
 
-            if (activeCargo.Count > maxLoopCapacity)
-            {
-                Lose();
-            }
+            // CALISAN SISTEM: overflow Lose KAPATILDI - kupler yolda donmasin, dolasmaya devam etsin
+            // (yeni mantikta kupler ancak uyan tira iner, o yuzden yolda birikip dolasabilirler)
             UpdateHud();
         }
 
@@ -1015,36 +1013,40 @@ namespace ColorCargoLoop
             if (collider != null) collider.enabled = false;
 
             Vector3 start = cart.transform.position;
-            TruckExitRoute route;
-            if (!truckExitRoutes.TryGetValue(cart, out route) || route == null)
-            {
-                route = new TruckExitRoute
-                {
-                    Start = start,
-                    PortalMouth = start + Vector3.right * 1.35f,
-                    PortalInside = start + Vector3.right * 2.1f
-                };
-            }
+            Vector3 baseScale = cart.transform.localScale;
+            Vector3 exitTarget = start + Vector3.right * 1.15f; // kisa mesafe, saga dogru
 
+            // CALISAN SISTEM: TEK PARCA akici surus (gidip-durup-gitme YOK)
             float t = 0f;
+            float driveDur = 0.34f;
             while (t < 1f)
             {
-                t += Time.deltaTime * 1.45f;
+                t += Time.deltaTime / driveDur;
                 float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
-                cart.transform.position = Vector3.Lerp(start, route.PortalMouth, eased);
+                cart.transform.position = Vector3.Lerp(start, exitTarget, eased);
                 cart.transform.rotation = Quaternion.identity;
                 yield return null;
             }
 
+            // POP: hizlica buyu sonra kuculup yok ol
             t = 0f;
+            float popUpDur = 0.10f;
             while (t < 1f)
             {
-                t += Time.deltaTime * 1.9f;
-                float eased = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(t));
-                cart.transform.position = Vector3.Lerp(route.PortalMouth, route.PortalInside, eased);
+                t += Time.deltaTime / popUpDur;
+                cart.transform.localScale = baseScale * Mathf.Lerp(1f, 1.25f, Mathf.Clamp01(t));
+                yield return null;
+            }
+            t = 0f;
+            float popDownDur = 0.12f;
+            while (t < 1f)
+            {
+                t += Time.deltaTime / popDownDur;
+                cart.transform.localScale = baseScale * Mathf.Lerp(1.25f, 0f, Mathf.Clamp01(t));
                 yield return null;
             }
 
+            cart.transform.localScale = baseScale;
             cart.gameObject.SetActive(false);
             UpdateHud();
 
@@ -1186,6 +1188,11 @@ namespace ColorCargoLoop
             // Per-level camera ayari - loop boyutuna gore ortho size
             AdjustCameraForLevel();
 
+            // CALISAN SISTEM: tirlarin altina PARK ALANI zemini (acik renk, oval kose dikdortgen)
+            float groundSizeX = cartModelTargetSize + 0.8f;
+            float groundSizeZ = totalSpan + cartModelTargetSize * 0.5f + 0.9f;
+            CreateParkingGround(new Vector3(cartCenterOffsetX, 0.02f, 0f), groundSizeX, groundSizeZ, 0.55f);
+
             for (int i = 0; i < cartCount; i++)
             {
                 RuntimeCart cartData = level.Carts[i];
@@ -1203,6 +1210,7 @@ namespace ColorCargoLoop
                 CargoCartView view = cartObject.AddComponent<CargoCartView>();
                 Color accentColor = CargoColorPalette.ToColor(cartData.TargetColor);
                 view.Initialize(this, i + 1, cartData.TargetColor, cartData.InitialSlotColors, slotFillThreshold, accentColor, resolvedCartModel);
+                view.SetAllowLastColorRelease(level.AllowLastColorRelease);
                 carts.Add(view);
                 BuildTruckExitRoute(view);
             }
@@ -1251,6 +1259,57 @@ namespace ColorCargoLoop
                 PortalInside = portalInside,
                 Portal = null
             };
+        }
+
+        /// <summary>
+        /// CALISAN SISTEM: tirlarin altina park alani zemini.
+        /// Acik renk, koseleri yuvarlatilmis (oval) dikdortgen - plus govde + 4 disc kose.
+        /// </summary>
+        private void CreateParkingGround(Vector3 center, float sizeX, float sizeZ, float cornerRadius)
+        {
+            Material groundMat = GetRuntimeMaterial("ParkingGround", new Color(0.88f, 0.88f, 0.92f));
+            float r = Mathf.Min(cornerRadius, Mathf.Min(sizeX, sizeZ) * 0.5f);
+            float h = 0.04f;
+
+            GameObject root = new GameObject("ParkingGround");
+            root.transform.SetParent(cartRoot, false);
+            root.transform.position = center;
+
+            // Plus govde: koseler bos kalir, disc'ler doldurur
+            GameObject barX = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            barX.name = "ParkBarX";
+            barX.transform.SetParent(root.transform, false);
+            barX.transform.localScale = new Vector3(sizeX, h, Mathf.Max(0.1f, sizeZ - 2f * r));
+            Destroy(barX.GetComponent<Collider>());
+            barX.GetComponent<Renderer>().sharedMaterial = groundMat;
+
+            GameObject barZ = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            barZ.name = "ParkBarZ";
+            barZ.transform.SetParent(root.transform, false);
+            barZ.transform.localScale = new Vector3(Mathf.Max(0.1f, sizeX - 2f * r), h, sizeZ);
+            Destroy(barZ.GetComponent<Collider>());
+            barZ.GetComponent<Renderer>().sharedMaterial = groundMat;
+
+            // 4 yuvarlak kose (yassi silindir = disc)
+            float cx = sizeX * 0.5f - r;
+            float cz = sizeZ * 0.5f - r;
+            Vector3[] corners =
+            {
+                new Vector3( cx, -0.002f,  cz),
+                new Vector3(-cx, -0.002f,  cz),
+                new Vector3( cx, -0.002f, -cz),
+                new Vector3(-cx, -0.002f, -cz)
+            };
+            for (int i = 0; i < corners.Length; i++)
+            {
+                GameObject disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
+                disc.name = "ParkCorner" + i;
+                disc.transform.SetParent(root.transform, false);
+                disc.transform.localPosition = corners[i];
+                disc.transform.localScale = new Vector3(2f * r, h * 0.5f, 2f * r);
+                Destroy(disc.GetComponent<Collider>());
+                disc.GetComponent<Renderer>().sharedMaterial = groundMat;
+            }
         }
 
         private void CreateRoundedGroundStrip(Transform parent, string name, Vector3 center, float length, float width, float height, Material material)
@@ -2265,6 +2324,7 @@ namespace ColorCargoLoop
             public int MaxLoopCapacity;
             public float CargoMoveSpeed;
             public PathDesign PathDesign;
+            public bool AllowLastColorRelease; // ileri levellerde true: son renk de tiklanabilir
             public List<RuntimeCart> Carts = new List<RuntimeCart>();
 
             public IEnumerable<CargoColor> UsedColors
@@ -2298,28 +2358,28 @@ namespace ColorCargoLoop
                 {
                     // Level 1 - 2 tÄ±r, 2 renk
                     Level(PathDesign.RoundedLoop, 200, 1.20f,
-                        Cart(R, Stripe(B, R)),
-                        Cart(B, Stripe(R, B))),
+                        Cart(G, Slots(B, B, B, B, B, B, G, G, G, G, G, G, G, G, G, G)),
+                        Cart(B, Slots(G, G, G, G, G, G, B, B, B, B, B, B, B, B, B, B))),
 
                     // Level 2 - 3 tÄ±r, 3 renk, dairesel akÄ±ÅŸ
                     Level(PathDesign.RoundedLoop, 250, 1.25f,
-                        Cart(R, Stripe(B, R)),
-                        Cart(B, Stripe(Y, B)),
-                        Cart(Y, Stripe(R, Y))),
+                        Cart(G, Slots(B, B, B, B, B, Y, Y, Y, Y, Y, Y, G, G, G, G, G)),
+                        Cart(Y, Slots(G, G, G, G, G, G, B, B, B, B, B, B, B, Y, Y, Y)),
+                        Cart(B, Slots(Y, Y, Y, Y, Y, Y, Y, G, G, G, G, G, B, B, B, B))),
 
-                    // Level 3 - 4 tÄ±r, 4 renk
-                    Level(PathDesign.WideLoop, 300, 1.30f,
-                        Cart(R, Stripe(B, R)),
-                        Cart(B, Stripe(Y, B)),
-                        Cart(Y, Stripe(G, Y)),
-                        Cart(G, Stripe(R, G))),
+                    // Level 3 - 4 tir, 4 renk - ILERI LEVEL: son renk de tiklanabilir
+                    Adv(Level(PathDesign.WideLoop, 300, 1.30f,
+                        Cart(B, Slots(Y, Y, Y, Y, G, G, G, P, P, B, B, B, B, B, B, B)),
+                        Cart(Y, Slots(P, P, P, G, G, G, G, Y, Y, Y, Y, Y, Y, B, B, B)),
+                        Cart(G, Slots(B, B, B, B, Y, Y, Y, P, P, P, G, G, G, G, G, G)),
+                        Cart(P, Slots(B, B, Y, Y, Y, G, G, G, P, P, P, P, P, P, P, P)))),
 
-                    // Level 4 - 4 tÄ±r, karÄ±ÅŸÄ±k Ã¶n stripe (16 slot - Ã¼st 8 mixed, alt 8 target)
-                    Level(PathDesign.PinchedLoop, 400, 1.35f,
-                        Cart(R, Slots(B, B, Y, B, G, B, Y, B, R, R, R, R, R, R, R, R)),
-                        Cart(B, Slots(Y, Y, R, Y, G, Y, R, Y, B, B, B, B, B, B, B, B)),
-                        Cart(Y, Slots(G, G, B, G, R, G, B, G, Y, Y, Y, Y, Y, Y, Y, Y)),
-                        Cart(G, Slots(R, R, Y, R, B, R, Y, R, G, G, G, G, G, G, G, G))),
+                    // Level 4 - 4 tir, 4 renk - ILERI LEVEL: son renk de tiklanabilir
+                    Adv(Level(PathDesign.PinchedLoop, 400, 1.35f,
+                        Cart(Y, Slots(B, B, B, B, B, G, G, G, P, P, P, P, P, Y, Y, Y)),
+                        Cart(P, Slots(Y, Y, Y, Y, B, B, B, B, G, G, G, G, P, P, P, P)),
+                        Cart(G, Slots(P, P, P, P, Y, Y, Y, Y, Y, B, B, B, G, G, G, G)),
+                        Cart(B, Slots(G, G, G, G, G, P, P, P, Y, Y, Y, Y, B, B, B, B)))),
                 };
             }
 
@@ -2352,6 +2412,13 @@ namespace ColorCargoLoop
                     CargoMoveSpeed = speed,
                     Carts = new List<RuntimeCart>(carts)
                 };
+            }
+
+            // Ileri level: son renk de tiklanabilir olsun
+            private static RuntimeLevel Adv(RuntimeLevel lvl)
+            {
+                lvl.AllowLastColorRelease = true;
+                return lvl;
             }
 
             private static RuntimeCart Cart(CargoColor target, CargoColor?[] initialSlots)

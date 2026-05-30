@@ -37,6 +37,10 @@ namespace ColorCargoLoop
         private int fillThreshold = 30;
         private Coroutine punchCoroutine;
 
+        // CALISAN SISTEM: ilk levellerde son/tek renk tiklanmasin (false), ileri levellerde tiklanabilir (true)
+        private bool allowLastColorRelease = false;
+        public void SetAllowLastColorRelease(bool value) { allowLastColorRelease = value; }
+
         // Grid boyutu - import edilen wagon'a gÃ¶re runtime'da hesaplanÄ±r
         private float effectiveGridWidth = 0.78f;
         private float effectiveGridDepth = 1.45f;
@@ -67,17 +71,22 @@ namespace ColorCargoLoop
         }
 
         /// <summary>
-        /// Win: 8 slot da full VE hepsi target rengiyle dolu.
+        /// Win: TUM slotlar dolu VE hepsi AYNI renk (hangi renk olursa olsun).
+        /// CALISAN SISTEM: artik atanmis targetColor yok - oyuncu tek renge indirir.
         /// </summary>
         public bool IsCartFullSingleColor(out CargoColor color)
         {
             color = targetColor;
+            CargoColor? first = null;
             for (int i = 0; i < slots.Length; i++)
             {
                 if (slots[i] == null) return false;
                 if (!slots[i].IsFull) return false;
-                if (slots[i].ClaimedColor != targetColor) return false;
+                if (!slots[i].ClaimedColor.HasValue) return false;
+                if (first == null) first = slots[i].ClaimedColor.Value;
+                else if (slots[i].ClaimedColor.Value != first.Value) return false;
             }
+            if (first.HasValue) color = first.Value;
             return true;
         }
 
@@ -174,12 +183,8 @@ namespace ColorCargoLoop
                 Slot s = slots[i];
                 if (s == null || !s.IsFull || !s.ClaimedColor.HasValue) continue;
 
-                // If the first visible cargo is already target color, keep it in the truck.
-                if (s.ClaimedColor.Value == targetColor)
-                {
-                    return released;
-                }
-
+                // CALISAN SISTEM: HER renk tiklanabilir (son/arka renk dahil).
+                // targetColor koruma blogu kaldirildi.
                 startIndex = i;
                 groupColor = s.ClaimedColor.Value;
                 break;
@@ -188,6 +193,27 @@ namespace ColorCargoLoop
             if (startIndex < 0)
             {
                 return released;
+            }
+
+            // CALISAN SISTEM: SON RENK korumasi.
+            // Tirda baska renk yoksa (on grup = TEK kalan renk) ve allowLastColorRelease=false ise
+            // bu son renk TIKLANAMAZ (ilk levellerde kafa karismasin, klasik sort mantigi).
+            if (!allowLastColorRelease)
+            {
+                bool hasDifferentColor = false;
+                for (int i = 0; i < SlotCount; i++)
+                {
+                    Slot s = slots[i];
+                    if (s != null && s.IsFull && s.ClaimedColor.HasValue && s.ClaimedColor.Value != groupColor)
+                    {
+                        hasDifferentColor = true;
+                        break;
+                    }
+                }
+                if (!hasDifferentColor)
+                {
+                    return released; // sadece tek renk var -> son renk, tiklanamaz
+                }
             }
 
             for (int i = startIndex; i < SlotCount; i++)
@@ -246,37 +272,60 @@ namespace ColorCargoLoop
 
         /// <summary>
         /// Bu renk iÃ§in uygun boÅŸ slot var mÄ±?
-        /// KURALLAR:
-        /// 1) Renk bu tÄ±rÄ±n HEDEF rengiyle eÅŸleÅŸmeli
-        /// 2) TÄ±rÄ±n Ã–NÃœ tamamen boÅŸalmÄ±ÅŸ olmalÄ± (hiÃ§ non-target dolu slot yok)
+        /// CALISAN SISTEM (yeni - targetColor YOK):
+        /// - Tir BOS ise: ilk gelen renk grubu baslatir (arkadan one dolar)
+        /// - Tir doluysa: kup, ACIK ON RENGE (en ondeki dolu grup) uyarsa
+        ///   o grubun onundeki bos slota iner (grup buyur, bitisik kalir)
         /// </summary>
         public bool TryFindOpenSlot(CargoColor color, out int slotIndex, out Vector3 worldPosition)
         {
             slotIndex = -1;
             worldPosition = transform.position;
 
-            // Kural 1: sadece kendi target rengini kabul et
-            if (color != targetColor) return false;
-
-            // Kural 2: Ã¶n (non-target slotlar) tamamen boÅŸ olmalÄ±
-            if (!IsFrontFullyEmptied()) return false;
-
-            // Ä°lk boÅŸ slot'u bul - en Ã¶ne yakÄ±n olanÄ± tercih et
+            // En ondeki DOLU slotu bul = acik on renk
+            int firstFilled = -1;
             for (int i = 0; i < SlotCount; i++)
             {
-                Slot s = slots[i];
-                if (s == null || s.IsFull) continue;
-                if (s.FillCount + s.ReservedCount >= fillThreshold) continue;
-                if (s.ClaimedColor.HasValue && s.ClaimedColor.Value != color) continue;
-                if (!s.ClaimedColor.HasValue) s.ClaimedColor = color;
+                if (slots[i] != null && slots[i].IsFull) { firstFilled = i; break; }
+            }
 
-                int fillOrder = Mathf.Clamp(s.FillCount + s.ReservedCount, 0, fillThreshold - 1);
-                s.ReservedCount++;
-                slotIndex = i;
-                worldPosition = slotRoot.TransformPoint(GetFillLocalPosition(s, fillOrder));
-                return true;
+            if (firstFilled < 0)
+            {
+                // Tir tamamen bos: herhangi renk kabul, en ARKADAN (yuksek index) doldur
+                for (int i = SlotCount - 1; i >= 0; i--)
+                {
+                    if (TryReserveSlot(i, color, out slotIndex, out worldPosition)) return true;
+                }
+                return false;
+            }
+
+            // Acik on renk - kup bu renge uymali
+            CargoColor exposed = slots[firstFilled].ClaimedColor.Value;
+            if (color != exposed) return false;
+
+            // Acik grubun ONUNDEKI bos slota in (onden geriye tara, grup one dogru buyur)
+            for (int i = firstFilled - 1; i >= 0; i--)
+            {
+                if (TryReserveSlot(i, color, out slotIndex, out worldPosition)) return true;
             }
             return false;
+        }
+
+        private bool TryReserveSlot(int i, CargoColor color, out int slotIndex, out Vector3 worldPosition)
+        {
+            slotIndex = -1;
+            worldPosition = transform.position;
+            Slot s = slots[i];
+            if (s == null || s.IsFull) return false;
+            if (s.FillCount + s.ReservedCount >= fillThreshold) return false;
+            if (s.ClaimedColor.HasValue && s.ClaimedColor.Value != color) return false;
+            if (!s.ClaimedColor.HasValue) s.ClaimedColor = color;
+
+            int fillOrder = Mathf.Clamp(s.FillCount + s.ReservedCount, 0, fillThreshold - 1);
+            s.ReservedCount++;
+            slotIndex = i;
+            worldPosition = slotRoot.TransformPoint(GetFillLocalPosition(s, fillOrder));
+            return true;
         }
 
         /// <summary>
@@ -559,26 +608,7 @@ namespace ColorCargoLoop
 
         private void AddAccentFlag(float wagonHeight)
         {
-            Color flagColor = CargoColorPalette.ToColor(targetColor);
-            Material flagMat = game.GetRuntimeMaterial("CartTargetFlag_" + targetColor, flagColor);
-            Material poleMat = game.GetRuntimeMaterial("CartAccentPole", new Color(0.10f, 0.08f, 0.16f));
-
-            GameObject pole = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-            pole.name = "AccentPole";
-            pole.transform.SetParent(transform, false);
-            float poleHeight = 0.46f;
-            pole.transform.localScale = new Vector3(0.05f, poleHeight * 0.5f, 0.05f);
-            pole.transform.localPosition = new Vector3(-game.CartGridWidth * 0.5f - 0.18f, wagonHeight + poleHeight * 0.5f, 0f);
-            DestroySafe(pole.GetComponent<Collider>());
-            pole.GetComponent<Renderer>().sharedMaterial = poleMat;
-
-            GameObject flag = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            flag.name = "AccentFlag";
-            flag.transform.SetParent(transform, false);
-            flag.transform.localScale = new Vector3(0.05f, 0.30f, 0.46f);
-            flag.transform.localPosition = new Vector3(-game.CartGridWidth * 0.5f - 0.18f, wagonHeight + poleHeight + 0.10f, 0.28f);
-            DestroySafe(flag.GetComponent<Collider>());
-            flag.GetComponent<Renderer>().sharedMaterial = flagMat;
+            // CALISAN SISTEM: targetColor kalktigi icin tir bayraklari (direk + bayrak) KALDIRILDI
         }
 
         private void CreateWheel(string wheelName, Vector3 localPosition, Material material)
