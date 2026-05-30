@@ -329,25 +329,30 @@ namespace ColorCargoLoop
         }
 
         /// <summary>
-        /// Bir partikÃ¼lÃ¼ slot'a ekle. True dÃ¶nerse slot full olmuÅŸ demektir.
+        /// Bir partikÃ¼lÃ¼ slot'a ekle.
+        /// deposited=true: kup gercekten slota kondu. deposited=false: slot uygun degil (dolu/yanlis renk),
+        ///   cagiran kupu KAYBETMEMELI, yola geri birakmali.
+        /// return=true: slot bu kupla FULL oldu.
         /// </summary>
-        public bool AddParticleToSlot(int slotIndex, CargoColor color)
+        public bool AddParticleToSlot(int slotIndex, CargoColor color, out bool deposited)
         {
+            deposited = false;
             if (slotIndex < 0 || slotIndex >= SlotCount) return false;
             Slot s = slots[slotIndex];
-            if (s == null || s.IsFull) return false;
-            if (s.ReservedCount > 0) s.ReservedCount--;
+            if (s == null) return false;
 
-            if (!s.ClaimedColor.HasValue)
+            // Slot artik kabul edemiyor (dolu ya da baska renge claim) -> fantom rezervasyonu birak, deposit YOK
+            if (s.IsFull || (s.ClaimedColor.HasValue && s.ClaimedColor.Value != color))
             {
-                s.ClaimedColor = color;
+                if (s.ReservedCount > 0) s.ReservedCount--;
+                return false;
             }
-            else if (s.ClaimedColor.Value != color)
-            {
-                return false; // baÅŸka renge claim edilmiÅŸ
-            }
+
+            if (s.ReservedCount > 0) s.ReservedCount--;
+            if (!s.ClaimedColor.HasValue) s.ClaimedColor = color;
 
             s.FillCount++;
+            deposited = true;
             RebuildSlotVisual(slotIndex);
             if (s.FillCount >= fillThreshold)
             {
@@ -529,16 +534,17 @@ namespace ColorCargoLoop
                 {
                     float wagonX = bounds.size.x;
                     float wagonZ = bounds.size.z;
-                    // %85 wagon'a sÄ±ÄŸsÄ±n
-                    float lengthFillRatio = 0.62f;
-                    float widthFillRatio = 0.72f;
+                    // CALISAN SISTEM: kasayi daha dolu goster - arka bosluk kapansin
+                    float lengthFillRatio = 0.68f;
+                    float widthFillRatio = 0.76f;
                     if (wagonX >= wagonZ)
                     {
                         // Wagon uzun ekseni X â†’ grid'i 90Â° dÃ¶ndÃ¼r (4 satÄ±r X yÃ¶nÃ¼nde)
                         slotRoot.localRotation = Quaternion.Euler(0f, 90f, 0f);
                         effectiveGridDepth = wagonX * lengthFillRatio;
                         effectiveGridWidth = wagonZ * widthFillRatio;
-                        slotRoot.localPosition += new Vector3(-wagonX * 0.16f, 0f, 0f);
+                        // CALISAN SISTEM: hazneyi bi tik saga (kafa/kabin tarafina) yaklastir
+                        slotRoot.localPosition += new Vector3(-wagonX * 0.11f, 0f, 0f);
                     }
                     else
                     {
@@ -698,7 +704,9 @@ namespace ColorCargoLoop
                 cube.name = "Slot_" + slotIndex + "_Full_" + s.ClaimedColor.Value;
                 cube.transform.SetParent(slotRoot, false);
                 cube.transform.localPosition = s.LocalPosition + new Vector3(0f, game.SlotBlockSize.y * 0.5f, 0f);
-                cube.transform.localScale = new Vector3(fitScale.x * 0.95f, fitScale.y, fitScale.z * 0.95f);
+                // CALISAN SISTEM: SOLID BLOK - ayni renk komsular bitisik (cizgi yok).
+                // Z ekseninde hafif overlap (1.04) -> ayni renk slotlar tek bütün gorunur.
+                cube.transform.localScale = new Vector3(colStep * 0.92f, fitScale.y, rowStep * 1.04f);
                 DestroySafe(cube.GetComponent<Collider>());
                 cube.GetComponent<Renderer>().sharedMaterial = game.GetCargoMaterial(s.ClaimedColor.Value);
                 s.FullVisual = cube;

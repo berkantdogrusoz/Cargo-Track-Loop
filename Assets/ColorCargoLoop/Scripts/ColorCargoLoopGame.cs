@@ -286,10 +286,10 @@ namespace ColorCargoLoop
 
         private IEnumerator SpawnFrontBurst(CargoCartView cart, List<CargoCartView.ReleasedCube> released)
         {
-            // Her released slot iÃ§in particlesPerTap kadar kÃ¼Ã§Ã¼k partikÃ¼l Ã¼ret.
-            // TÃ¼mÃ¼ aynÄ± dock noktasÄ±ndan stream halinde Ã§Ä±kar.
-            Vector3 sharedExitOrigin = GetSharedExitOrigin(cart);
-            float dockDist = FindNearestPathDistance(sharedExitOrigin);
+            // CALISAN SISTEM: kupler kendi DIZILI SLOT konumlarindan ucar (tek nokta degil).
+            // Yola giris noktasi (dock) yine en yakin path noktasi - oraya akarlar.
+            Vector3 cartRear = GetSharedExitOrigin(cart);
+            float dockDist = FindNearestPathDistance(cartRear);
 
             int particlesPerSlot = Mathf.Max(1, particlesPerTap);
 
@@ -298,17 +298,20 @@ namespace ColorCargoLoop
                 if (state != GameState.Playing) yield break;
                 var r = released[i];
 
+                // Bu slotun gercek dunya konumu = kupun ucus baslangici
+                Vector3 slotOrigin = cart.GetSlotWorldPosition(r.SlotIndex) + Vector3.up * 0.15f;
+
                 // CALISAN SISTEM: bu slotu simdi bosalt (sirayla gorsel)
                 cart.EmptySlot(r.SlotIndex);
 
-                // CALISAN SISTEM: 2'ser 2'ser ucma - her dalga 2 kup birden
+                // CALISAN SISTEM: 2'ser 2'ser ucma - her dalga 2 kup birden, slot konumundan
                 for (int p = 0; p < particlesPerSlot; p += 2)
                 {
                     if (state != GameState.Playing) yield break;
-                    SpawnParticle(r.Color, cart, r.SlotIndex, sharedExitOrigin, dockDist);
+                    SpawnParticle(r.Color, cart, r.SlotIndex, slotOrigin, dockDist);
                     if (p + 1 < particlesPerSlot)
                     {
-                        SpawnParticle(r.Color, cart, r.SlotIndex, sharedExitOrigin, dockDist);
+                        SpawnParticle(r.Color, cart, r.SlotIndex, slotOrigin, dockDist);
                     }
                     if (particleBurstStagger > 0f)
                     {
@@ -791,8 +794,8 @@ namespace ColorCargoLoop
 
                     if (t >= 1f)
                     {
-                        CollectCargo(cargo);
-                        activeCargo.RemoveAt(i);
+                        // Kup inemezse CollectCargo false doner -> listede kalir, yola geri doner
+                        if (CollectCargo(cargo)) activeCargo.RemoveAt(i);
                     }
 
                     continue;
@@ -953,17 +956,34 @@ namespace ColorCargoLoop
             return best;
         }
 
-        private void CollectCargo(ActiveCargo cargo)
+        /// <summary>
+        /// Kup hedef slota varinca cagrilir.
+        /// return true: kup tuketildi (listeden cikar). false: slot uygun degildi, kup YOLA GERI BIRAKILDI (kaybetme).
+        /// </summary>
+        private bool CollectCargo(ActiveCargo cargo)
         {
-            clearedCount++;
-            bool slotJustBecameFull = false;
             if (cargo.DestinationCart != null && cargo.DestinationColumn >= 0)
             {
-                slotJustBecameFull = cargo.DestinationCart.AddParticleToSlot(cargo.DestinationColumn, cargo.Color);
-            }
-            if (slotJustBecameFull)
-            {
-                if (cargo.DestinationCart != null && !completedCarts.Contains(cargo.DestinationCart))
+                bool deposited;
+                bool slotJustBecameFull = cargo.DestinationCart.AddParticleToSlot(cargo.DestinationColumn, cargo.Color, out deposited);
+
+                if (!deposited)
+                {
+                    // Slot artik uygun degil (dolmus/renk degismis) -> kupu KAYBETME, yola geri birak
+                    cargo.IsCollecting = false;
+                    cargo.DestinationCart = null;
+                    cargo.DestinationColumn = -1;
+                    cargo.Age = 0f;
+                    if (cargo.Visual != null)
+                    {
+                        cargo.Distance = FindNearestPathDistance(cargo.Visual.transform.position);
+                        cargo.PreviousDistance = cargo.Distance;
+                    }
+                    return false; // listede kalsin, dolasmaya devam etsin
+                }
+
+                clearedCount++;
+                if (slotJustBecameFull && !completedCarts.Contains(cargo.DestinationCart))
                 {
                     CargoColor solvedColor;
                     if (cargo.DestinationCart.IsCartFullSingleColor(out solvedColor))
@@ -972,8 +992,14 @@ namespace ColorCargoLoop
                     }
                 }
             }
+            else
+            {
+                clearedCount++;
+            }
+
             Destroy(cargo.Visual);
             UpdateHud();
+            return true;
         }
 
         private bool AreAllCartsSolved()
@@ -1262,35 +1288,30 @@ namespace ColorCargoLoop
         }
 
         /// <summary>
-        /// CALISAN SISTEM: tirlarin altina park alani zemini.
-        /// Acik renk, koseleri yuvarlatilmis (oval) dikdortgen - plus govde + 4 disc kose.
+        /// Yuvarlak koseli zemin paneli (plus govde + 4 disc kose). Park alani ve dekor panelleri icin ORTAK.
         /// </summary>
-        private void CreateParkingGround(Vector3 center, float sizeX, float sizeZ, float cornerRadius)
+        private GameObject CreateRoundedPad(string name, Transform parent, Vector3 center, float sizeX, float sizeZ, float cornerRadius, float height, Material mat)
         {
-            Material groundMat = GetRuntimeMaterial("ParkingGround", new Color(0.88f, 0.88f, 0.92f));
             float r = Mathf.Min(cornerRadius, Mathf.Min(sizeX, sizeZ) * 0.5f);
-            float h = 0.04f;
 
-            GameObject root = new GameObject("ParkingGround");
-            root.transform.SetParent(cartRoot, false);
+            GameObject root = new GameObject(name);
+            root.transform.SetParent(parent, false);
             root.transform.position = center;
 
-            // Plus govde: koseler bos kalir, disc'ler doldurur
             GameObject barX = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            barX.name = "ParkBarX";
+            barX.name = "PadBarX";
             barX.transform.SetParent(root.transform, false);
-            barX.transform.localScale = new Vector3(sizeX, h, Mathf.Max(0.1f, sizeZ - 2f * r));
+            barX.transform.localScale = new Vector3(sizeX, height, Mathf.Max(0.1f, sizeZ - 2f * r));
             Destroy(barX.GetComponent<Collider>());
-            barX.GetComponent<Renderer>().sharedMaterial = groundMat;
+            barX.GetComponent<Renderer>().sharedMaterial = mat;
 
             GameObject barZ = GameObject.CreatePrimitive(PrimitiveType.Cube);
-            barZ.name = "ParkBarZ";
+            barZ.name = "PadBarZ";
             barZ.transform.SetParent(root.transform, false);
-            barZ.transform.localScale = new Vector3(Mathf.Max(0.1f, sizeX - 2f * r), h, sizeZ);
+            barZ.transform.localScale = new Vector3(Mathf.Max(0.1f, sizeX - 2f * r), height, sizeZ);
             Destroy(barZ.GetComponent<Collider>());
-            barZ.GetComponent<Renderer>().sharedMaterial = groundMat;
+            barZ.GetComponent<Renderer>().sharedMaterial = mat;
 
-            // 4 yuvarlak kose (yassi silindir = disc)
             float cx = sizeX * 0.5f - r;
             float cz = sizeZ * 0.5f - r;
             Vector3[] corners =
@@ -1303,13 +1324,23 @@ namespace ColorCargoLoop
             for (int i = 0; i < corners.Length; i++)
             {
                 GameObject disc = GameObject.CreatePrimitive(PrimitiveType.Cylinder);
-                disc.name = "ParkCorner" + i;
+                disc.name = "PadCorner" + i;
                 disc.transform.SetParent(root.transform, false);
                 disc.transform.localPosition = corners[i];
-                disc.transform.localScale = new Vector3(2f * r, h * 0.5f, 2f * r);
+                disc.transform.localScale = new Vector3(2f * r, height * 0.5f, 2f * r);
                 Destroy(disc.GetComponent<Collider>());
-                disc.GetComponent<Renderer>().sharedMaterial = groundMat;
+                disc.GetComponent<Renderer>().sharedMaterial = mat;
             }
+            return root;
+        }
+
+        /// <summary>
+        /// Tirlarin altina park alani zemini (yuvarlak koseli acik panel).
+        /// </summary>
+        private void CreateParkingGround(Vector3 center, float sizeX, float sizeZ, float cornerRadius)
+        {
+            Material groundMat = GetRuntimeMaterial("ParkingGround", new Color(0.88f, 0.88f, 0.92f));
+            CreateRoundedPad("ParkingGround", cartRoot, center, sizeX, sizeZ, cornerRadius, 0.04f, groundMat);
         }
 
         private void CreateRoundedGroundStrip(Transform parent, string name, Vector3 center, float length, float width, float height, Material material)
@@ -1465,6 +1496,49 @@ namespace ColorCargoLoop
                 float distance = path.TotalLength * t;
                 GameObject root = CreateChevronArrowRoot(distance, arrowMat);
                 flowMarkers.Add(new AnimatedFlowMarker { Root = root.transform, PathDistance = distance });
+            }
+
+            // CALISAN SISTEM: ekrani dolduran DEKORATIF yollar (collider yok, gameplaye etkisiz)
+            BuildDecorRoads();
+        }
+
+        /// <summary>
+        /// Loop disindaki bos ekrani dolduran DEKORATIF paneller - park alani tarzi (yuvarlak koseli).
+        /// Collider yok, gameplaye etkisiz. Ust/alt bantta park yeri cizgili paneller.
+        /// </summary>
+        private void BuildDecorRoads()
+        {
+            Material padMat = GetRuntimeMaterial("DecorPad", new Color(0.80f, 0.81f, 0.86f));
+            Material slotMat = GetRuntimeMaterial("DecorPadSlot", new Color(0.69f, 0.70f, 0.76f));
+
+            float y = 0.02f;
+            float zBand = (trackDepthZ * 0.5f) + 2.6f;                  // loop'a DEGMESIN
+            float padX = trackWidthX + (trackCornerRadius * 2f) + 2.0f; // ekran genisligini doldur
+            float padZ = 2.3f;
+            float radius = 0.7f;
+
+            CreateDecorPad("DecorPadTop", new Vector3(0f, y, zBand), padX, padZ, radius, padMat, slotMat);
+            CreateDecorPad("DecorPadBot", new Vector3(0f, y, -zBand), padX, padZ, radius, padMat, slotMat);
+        }
+
+        private void CreateDecorPad(string name, Vector3 center, float sizeX, float sizeZ, float radius, Material padMat, Material slotMat)
+        {
+            GameObject pad = CreateRoundedPad(name, trackRoot, center, sizeX, sizeZ, radius, 0.04f, padMat);
+
+            // Park yeri bolme cizgileri (ince koyu cubuklar) - parking lot hissi
+            int slots = Mathf.Max(3, Mathf.RoundToInt(sizeX / 1.6f));
+            float inner = sizeX - 2f * radius;
+            for (int i = 1; i < slots; i++)
+            {
+                float t = (float)i / slots;
+                float px = Mathf.Lerp(-inner * 0.5f, inner * 0.5f, t);
+                GameObject divider = GameObject.CreatePrimitive(PrimitiveType.Cube);
+                divider.name = "Slot" + i;
+                divider.transform.SetParent(pad.transform, false);
+                divider.transform.localPosition = new Vector3(px, 0.03f, 0f);
+                divider.transform.localScale = new Vector3(0.08f, 0.02f, sizeZ * 0.62f);
+                Destroy(divider.GetComponent<Collider>());
+                divider.GetComponent<Renderer>().sharedMaterial = slotMat;
             }
         }
 
