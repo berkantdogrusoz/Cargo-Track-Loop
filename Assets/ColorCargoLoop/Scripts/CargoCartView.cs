@@ -39,7 +39,9 @@ namespace ColorCargoLoop
 
         // CALISAN SISTEM: ilk levellerde son/tek renk tiklanmasin (false), ileri levellerde tiklanabilir (true)
         private bool allowLastColorRelease = false;
+        private bool acceptAnyColorWhenEmpty = false;
         public void SetAllowLastColorRelease(bool value) { allowLastColorRelease = value; }
+        public void SetAcceptAnyColorWhenEmpty(bool value) { acceptAnyColorWhenEmpty = value; }
 
         // Grid boyutu - import edilen wagon'a gÃ¶re runtime'da hesaplanÄ±r
         private float effectiveGridWidth = 0.78f;
@@ -163,6 +165,15 @@ namespace ColorCargoLoop
             return FindFrontReleaseGroup().Count > 0;
         }
 
+        /// <summary>Bu tap'te ON'den salinacak grubun rengini verir (yoksa false). Uretken-hamle kontrolu icin.</summary>
+        public bool TryGetReleasableFrontColor(out CargoColor color)
+        {
+            var g = FindFrontReleaseGroup();
+            if (g.Count > 0) { color = g[0].Color; return true; }
+            color = default(CargoColor);
+            return false;
+        }
+
         public List<ReleasedCube> ReleaseAllFront()
         {
             // CALISAN SISTEM: slot'lar hemen bosalmaz - SpawnFrontBurst sirayla bosaltir
@@ -258,6 +269,31 @@ namespace ColorCargoLoop
             RebuildSlotVisual(slotIndex);
         }
 
+        public struct PartialInfo { public CargoColor Color; public int Count; }
+
+        /// <summary>
+        /// Yarim (kismi dolu, IsFull degil) slotlardaki kupleri DISARI cikar (yola geri donsun diye).
+        /// Tum rezervasyonlari da temizler. Boylece slotlar hep dolu/bos kalir, sayim korunur.
+        /// </summary>
+        public List<PartialInfo> DrainPartialSlots()
+        {
+            var list = new List<PartialInfo>();
+            for (int i = 0; i < SlotCount; i++)
+            {
+                Slot s = slots[i];
+                if (s == null) continue;
+                s.ReservedCount = 0;
+                if (!s.IsFull && s.FillCount > 0 && s.ClaimedColor.HasValue)
+                {
+                    list.Add(new PartialInfo { Color = s.ClaimedColor.Value, Count = s.FillCount });
+                    s.ClaimedColor = null;
+                    s.FillCount = 0;
+                    RebuildSlotVisual(i);
+                }
+            }
+            return list;
+        }
+
         public void PushColorIntoSlot(int slotIndex, CargoColor color)
         {
             if (slotIndex < 0 || slotIndex >= SlotCount) return;
@@ -271,44 +307,55 @@ namespace ColorCargoLoop
         }
 
         /// <summary>
-        /// Bu renk iÃ§in uygun boÅŸ slot var mÄ±?
-        /// CALISAN SISTEM (yeni - targetColor YOK):
-        /// - Tir BOS ise: ilk gelen renk grubu baslatir (arkadan one dolar)
-        /// - Tir doluysa: kup, ACIK ON RENGE (en ondeki dolu grup) uyarsa
-        ///   o grubun onundeki bos slota iner (grup buyur, bitisik kalir)
+        /// HEDEF-TABANLI landing (garanti ev): kup SADECE kendi HEDEF tirina iner (mor kup -> mor tir).
+        /// Tirda hala NON-TARGET renk varsa inmez (once oyuncu onlari eject etmeli -> karismaz).
+        /// Boylece her renk kesin yerini bulur, tir tek renge dolup gider.
         /// </summary>
         public bool TryFindOpenSlot(CargoColor color, out int slotIndex, out Vector3 worldPosition)
         {
             slotIndex = -1;
             worldPosition = transform.position;
 
-            // En ondeki DOLU slotu bul = acik on renk
-            int firstFilled = -1;
+            // 1) Kup, bu tirin HEDEF rengiyle eslesmeli
+            if (color != targetColor)
+            {
+                if (!acceptAnyColorWhenEmpty || !IsCompletelyEmpty())
+                {
+                    return false;
+                }
+
+                targetColor = color;
+                RetintBody(CargoColorPalette.ToColor(color)); // ekstra/buffer tir, benimsedigi RENGE boyansin
+            }
+
+            // 2) Tirda non-target dolu slot varsa target kup inmesin (mixlenmesin)
             for (int i = 0; i < SlotCount; i++)
             {
-                if (slots[i] != null && slots[i].IsFull) { firstFilled = i; break; }
+                Slot s = slots[i];
+                if (s != null && s.IsFull && s.ClaimedColor.HasValue && s.ClaimedColor.Value != targetColor)
+                    return false;
             }
 
-            if (firstFilled < 0)
-            {
-                // Tir tamamen bos: herhangi renk kabul, en ARKADAN (yuksek index) doldur
-                for (int i = SlotCount - 1; i >= 0; i--)
-                {
-                    if (TryReserveSlot(i, color, out slotIndex, out worldPosition)) return true;
-                }
-                return false;
-            }
-
-            // Acik on renk - kup bu renge uymali
-            CargoColor exposed = slots[firstFilled].ClaimedColor.Value;
-            if (color != exposed) return false;
-
-            // Acik grubun ONUNDEKI bos slota in (onden geriye tara, grup one dogru buyur)
-            for (int i = firstFilled - 1; i >= 0; i--)
+            // 3) Bos slota target koy (arkadan one dogru doldur -> tek renk olur)
+            for (int i = SlotCount - 1; i >= 0; i--)
             {
                 if (TryReserveSlot(i, color, out slotIndex, out worldPosition)) return true;
             }
             return false;
+        }
+
+        public bool IsCompletelyEmpty()
+        {
+            for (int i = 0; i < SlotCount; i++)
+            {
+                Slot s = slots[i];
+                if (s == null) continue;
+                if (s.IsFull || s.FillCount > 0 || s.ReservedCount > 0 || s.ClaimedColor.HasValue)
+                {
+                    return false;
+                }
+            }
+            return true;
         }
 
         private bool TryReserveSlot(int i, CargoColor color, out int slotIndex, out Vector3 worldPosition)
@@ -467,6 +514,40 @@ namespace ColorCargoLoop
             BuildPrimitiveShell();
         }
 
+        // Tirin govdesini RUNTIME'da yeniden boyar (ekstra/buffer tir bir renk benimseyince).
+        private void RetintBody(Color tint)
+        {
+            Transform iw = transform.Find("ImportedWagon");
+            if (iw != null) TintImportedBody(iw.gameObject, tint);
+            accentColor = tint;
+        }
+
+        // Imported tirin GOVDE materyalini hedef rengine boyar (tekerlek/cam dokunulmaz).
+        // Govde = materyal adinda "body" gecen (wheel/glass haric). Toon shader _Color ile renk uygular.
+        private void TintImportedBody(GameObject root, Color tint)
+        {
+            if (root == null) return;
+            Renderer[] rs = root.GetComponentsInChildren<Renderer>();
+            for (int i = 0; i < rs.Length; i++)
+            {
+                if (rs[i] == null) continue;
+                Material[] mats = rs[i].materials; // INSTANCED kopya (per-renderer) -> diger tirlari etkilemez
+                bool changed = false;
+                for (int j = 0; j < mats.Length; j++)
+                {
+                    if (mats[j] == null) continue;
+                    string n = mats[j].name.ToLowerInvariant();
+                    if (n.Contains("wheel") || n.Contains("glass") || n.Contains("tire") || n.Contains("window")) continue;
+                    if (!n.Contains("body")) continue;
+                    if (mats[j].HasProperty("baseColorFactor")) mats[j].SetColor("baseColorFactor", tint); // glTFast (asil bu)
+                    if (mats[j].HasProperty("_BaseColor")) mats[j].SetColor("_BaseColor", tint);           // URP Lit
+                    if (mats[j].HasProperty("_Color")) mats[j].SetColor("_Color", tint);                   // Toon
+                    changed = true;
+                }
+                if (changed) rs[i].materials = mats;
+            }
+        }
+
         private void BuildImportedShell(GameObject sourcePrefab)
         {
             GameObject imported = Instantiate(sourcePrefab, transform);
@@ -505,6 +586,8 @@ namespace ColorCargoLoop
             }
 
             imported.transform.localPosition += game.CartModelLocalOffset;
+            game.ApplyCartoonStyleToRenderers(imported, "CartImported_" + cartIndex);
+            TintImportedBody(imported, accentColor); // tiri HEDEF rengine boya (sadece govde; tekerlek/cam haric)
 
             // Wagon yÃ¼ksekliÄŸi
             float wagonHeight = 0.45f;
@@ -534,17 +617,17 @@ namespace ColorCargoLoop
                 {
                     float wagonX = bounds.size.x;
                     float wagonZ = bounds.size.z;
-                    // CALISAN SISTEM: kasayi daha dolu goster - arka bosluk kapansin
-                    float lengthFillRatio = 0.68f;
-                    float widthFillRatio = 0.76f;
+                    // CALISAN SISTEM: kasa-fit oranlari Inspector/MCP'den ayarlanabilir (BedLengthFill/Width/Offset)
+                    float lengthFillRatio = game.BedLengthFillRatio;
+                    float widthFillRatio = game.BedWidthFillRatio;
+                    float offsetRatio = game.BedOffsetRatio;
                     if (wagonX >= wagonZ)
                     {
                         // Wagon uzun ekseni X â†’ grid'i 90Â° dÃ¶ndÃ¼r (4 satÄ±r X yÃ¶nÃ¼nde)
                         slotRoot.localRotation = Quaternion.Euler(0f, 90f, 0f);
                         effectiveGridDepth = wagonX * lengthFillRatio;
                         effectiveGridWidth = wagonZ * widthFillRatio;
-                        // CALISAN SISTEM: hazneyi bi tik saga (kafa/kabin tarafina) yaklastir
-                        slotRoot.localPosition += new Vector3(-wagonX * 0.11f, 0f, 0f);
+                        slotRoot.localPosition += new Vector3(wagonX * offsetRatio, 0f, 0f);
                     }
                     else
                     {
@@ -552,7 +635,7 @@ namespace ColorCargoLoop
                         slotRoot.localRotation = Quaternion.identity;
                         effectiveGridDepth = wagonZ * lengthFillRatio;
                         effectiveGridWidth = wagonX * widthFillRatio;
-                        slotRoot.localPosition += new Vector3(0f, 0f, -wagonZ * 0.16f);
+                        slotRoot.localPosition += new Vector3(0f, 0f, wagonZ * offsetRatio);
                     }
                 }
                 else
@@ -674,13 +757,117 @@ namespace ColorCargoLoop
             }
         }
 
+        private readonly List<GameObject> groupVisuals = new List<GameObject>();
+        private readonly List<CargoColor> cargoColorBuffer = new List<CargoColor>();
+
+        // Kasa dolgu yogunlugu: dolu birim basina kac kup render edilsin (gorsel doluluk).
+        private const int CargoCubesPerUnit = 3;
+
+        /// <summary>
+        /// KARGO PILE render: kasa, yoldaki ucan kuplerle AYNI boyutta kuplerle DOLU gorunur.
+        /// Dolu birim basina birkac kup, kasanin 2D alanina + hafif yigin halinde DAGINIK yerlesir.
+        /// Pozisyonlar kasa sinirlari icine CLAMP'li -> yatay tasma yok; yukseklik sinirli -> dikey tasma kontrollu.
+        /// Renkler karisik ama oran korunur (oyuncu hangi renkten ne kadar var gorur).
+        /// </summary>
         private void RebuildAllSlotVisuals()
         {
-            for (int i = 0; i < SlotCount; i++) RebuildSlotVisual(i);
+            for (int i = 0; i < groupVisuals.Count; i++) DestroySafe(groupVisuals[i]);
+            groupVisuals.Clear();
+            for (int i = 0; i < SlotCount; i++)
+            {
+                if (slots[i] != null && slots[i].FullVisual != null) { DestroySafe(slots[i].FullVisual); slots[i].FullVisual = null; }
+            }
+
+            // Dolu slot renklerini topla (oran korunur -> oyuncu sayilari gorur)
+            cargoColorBuffer.Clear();
+            for (int i = 0; i < SlotCount; i++)
+            {
+                Slot s = slots[i];
+                if (s != null && s.IsFull && s.ClaimedColor.HasValue) cargoColorBuffer.Add(s.ClaimedColor.Value);
+            }
+            int filled = cargoColorBuffer.Count;
+            if (filled == 0) return;
+
+            // Kasadaki kup = YOLDAKI ucan kup ile BIREBIR ayni dunya boyutu (slotRoot olcegi telafi edilir)
+            Vector3 rc = game.RoadCargoScale;
+            float roadWorld = (rc.x + rc.z) * 0.5f;
+            Vector3 ls = slotRoot != null ? slotRoot.lossyScale : Vector3.one;
+            float parentScale = (Mathf.Abs(ls.x) + Mathf.Abs(ls.z)) * 0.5f;
+            float cubeSize = roadWorld / Mathf.Max(0.0001f, parentScale);
+
+            // Kasa bolgesi (slot local pozisyonlarindan -> kesin ortali). TASMA YOK: kup yarisi kadar iceri.
+            Vector3 centerLocal = (slots[0].LocalPosition + slots[SlotCount - 1].LocalPosition) * 0.5f;
+            float rowStep = effectiveGridDepth / GridRows;
+            float zHalf = Mathf.Abs(slots[SlotCount - 1].LocalPosition.z - slots[0].LocalPosition.z) * 0.5f + rowStep * 0.5f;
+            float inset = cubeSize * 0.6f; // rotasyon payi dahil guvenli kenar
+            float xHalfSafe = Mathf.Max(0f, effectiveGridWidth * 0.5f - inset);
+            float zHalfSafe = Mathf.Max(0f, zHalf - inset);
+            float baseY = game.SlotBlockSize.y * 0.4f;
+            float stackH = cubeSize * 1.0f; // yigin yuksekligi (duvar ustune cok tasmaz)
+
+            int n = filled * CargoCubesPerUnit;
+            for (int k = 0; k < n; k++)
+            {
+                float x = (Hash01(k, 1) * 2f - 1f) * xHalfSafe;
+                float z = (Hash01(k, 3) * 2f - 1f) * zHalfSafe;
+                float y = baseY + Hash01(k, 2) * stackH;
+                Vector3 pos = new Vector3(centerLocal.x + x, y, centerLocal.z + z);
+                Quaternion rot = Quaternion.Euler(
+                    (Hash01(k, 4) - 0.5f) * 34f,
+                    Hash01(k, 5) * 360f,
+                    (Hash01(k, 6) - 0.5f) * 34f);
+
+                CargoColor col = cargoColorBuffer[k % filled];
+                GameObject cube = game.CreateCargoBlockObject(col, "Cargo_" + k);
+                cube.transform.SetParent(slotRoot, false);
+                cube.transform.localPosition = pos;
+                cube.transform.localRotation = rot;
+                cube.transform.localScale = Vector3.one * cubeSize;
+                MeshRenderer mr = cube.GetComponent<MeshRenderer>();
+                if (mr != null) mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+                groupVisuals.Add(cube);
+            }
+        }
+
+        private static float Hash01(int a, int b)
+        {
+            uint h = (uint)((a * 73856093) ^ (b * 19349663));
+            h = (h ^ (h >> 13)) * 1274126177u;
+            return ((h >> 8) & 0xFFFF) / 65535f;
+        }
+
+        /// <summary>Bu tirin DOLU slotlarindaki distinct renkleri sete ekler (yapisal cozulebilirlik icin).</summary>
+        public void CollectPresentColors(HashSet<CargoColor> set)
+        {
+            if (set == null) return;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                Slot s = slots[i];
+                if (s != null && s.IsFull && s.ClaimedColor.HasValue) set.Add(s.ClaimedColor.Value);
+            }
+        }
+
+        /// <summary>En az 1 dolu slot var ve hepsi AYNI renk mi? (TAM DOLU sart DEGIL)</summary>
+        public bool IsSingleColor(out CargoColor color)
+        {
+            color = default(CargoColor);
+            bool found = false;
+            for (int i = 0; i < SlotCount; i++)
+            {
+                Slot s = slots[i];
+                if (s == null || !s.IsFull || !s.ClaimedColor.HasValue) continue;
+                if (!found) { color = s.ClaimedColor.Value; found = true; }
+                else if (s.ClaimedColor.Value != color) return false;
+            }
+            return found;
         }
 
         private void RebuildSlotVisual(int slotIndex)
         {
+            // Grup bazli render -> tek slot degisse de tum gruplari yeniden kur (komsuluk degisir)
+            RebuildAllSlotVisuals();
+            return;
+#pragma warning disable 0162
             Slot s = slots[slotIndex];
             if (s == null) return;
 
@@ -699,16 +886,17 @@ namespace ColorCargoLoop
 
             if (s.IsFull && s.ClaimedColor.HasValue)
             {
-                // CALISAN SISTEM: tek cell-fit cube, kalin gorunum
-                GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
-                cube.name = "Slot_" + slotIndex + "_Full_" + s.ClaimedColor.Value;
+                // CARTOON: YUVARLAK (oval kenarli) kup - sivri degil, yumusak gorunum
+                GameObject cube = new GameObject("Slot_" + slotIndex + "_Full_" + s.ClaimedColor.Value);
                 cube.transform.SetParent(slotRoot, false);
                 cube.transform.localPosition = s.LocalPosition + new Vector3(0f, game.SlotBlockSize.y * 0.5f, 0f);
-                // CALISAN SISTEM: SOLID BLOK - ayni renk komsular bitisik (cizgi yok).
-                // Z ekseninde hafif overlap (1.04) -> ayni renk slotlar tek bütün gorunur.
+                // SOLID BLOK - ayni renk komsular bitisik (Z'de hafif overlap 1.04)
                 cube.transform.localScale = new Vector3(colStep * 0.92f, fitScale.y, rowStep * 1.04f);
-                DestroySafe(cube.GetComponent<Collider>());
-                cube.GetComponent<Renderer>().sharedMaterial = game.GetCargoMaterial(s.ClaimedColor.Value);
+                MeshFilter mf = cube.AddComponent<MeshFilter>();
+                mf.sharedMesh = MeshUtils.RoundedCube();
+                MeshRenderer mr = cube.AddComponent<MeshRenderer>();
+                mr.sharedMaterial = game.GetCargoMaterial(s.ClaimedColor.Value);
+                mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
                 s.FullVisual = cube;
             }
             else
