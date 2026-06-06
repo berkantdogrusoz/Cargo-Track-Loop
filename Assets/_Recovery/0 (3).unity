@@ -415,7 +415,7 @@ Light:
   m_InnerSpotAngle: 21.80208
   m_CookieSize2D: {x: 10, y: 10}
   m_Shadows:
-    m_Type: 2
+    m_Type: 0
     m_Resolution: -1
     m_CustomResolution: -1
     m_Strength: 0.65
@@ -1538,7 +1538,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::ColorCargoLoop.ArrowsPixelGame
   truckPrefab: {fileID: -8570035969996092328, guid: 3c4508c6513080a44acd6a3a702fada4, type: 3}
-  arrowTexture: {fileID: 2800000, guid: 7bfa64b4319ce074385278d852c308b1, type: 3}
+  arrowTexture: {fileID: 0}
   gameCamera: {fileID: 200002}
   buildOnStart: 1
 --- !u!4 &1335510967
