@@ -47,6 +47,8 @@ namespace ColorCargoLoop
         public Vector3 portraitTileScale = new Vector3(0.074f, 0.13f, 0.074f);
 
         public string[] portraitRows;
+        [Tooltip("Opsiyonel hucre maskesi, USTTEN alta satirlar: '#'=hucre var, '.'=hucre yok. Bos birakirsan tam dikdortgen. T/L grid formlari icin.")]
+        public string[] cellMask;
         public ArrowsPixelTruckSpawn[] trucks;
         public ArrowsPixelExitGate[] exits;
     }
@@ -284,7 +286,7 @@ namespace ColorCargoLoop
             }
         }
 
-        static int[] CountPortraitColors(string[] rows)
+        public static int[] CountPortraitColors(string[] rows) // ArrowsPixelGame.ValidateActiveLevel de kullanir
         {
             int[] counts = new int[6];
             if (rows == null) return counts;
@@ -318,7 +320,7 @@ namespace ColorCargoLoop
             }
         }
 
-        static CargoColor IndexToCargo(int index)
+        public static CargoColor IndexToCargo(int index) // ArrowsPixelGame.ValidateActiveLevel de kullanir
         {
             switch (index)
             {
@@ -726,6 +728,7 @@ namespace ColorCargoLoop
             root = new GameObject("ArrowsPixelRoot").transform;
             trucks.Clear(); slotList.Clear(); cubesByColor.Clear(); moveCount = 0; inputLocked = false; gstate = GameState.Playing;
             ResolveActiveLevel();
+            ValidateActiveLevel();
             if (winPanel != null) winPanel.SetActive(false);
             if (losePanel != null) losePanel.SetActive(false);
             DisableLayoutPadOutlines();
@@ -793,6 +796,70 @@ namespace ColorCargoLoop
             activeExits = activeLevel.exits != null && activeLevel.exits.Length > 0
                 ? activeLevel.exits
                 : new[] { new ArrowsPixelExitGate { x = gridWidth / 2, z = gridHeight - 1, direction = ArrowsPixelExitDirection.Up } };
+        }
+
+        // Level saglik kontrolu (Faz A): renk dengesi + bos hucre + ilk hamle.
+        // Sorunlari Console'a uyari olarak yazar, oyunu durdurmaz. Uretilen leveller
+        // ApplyTruckCapacitiesFromPortrait ile zaten dengelenir; bu kontrol ozellikle elle yazilan leveller icin.
+        void ValidateActiveLevel()
+        {
+            if (activeLevel == null) return;
+            string lv = "[Level " + currentLevel + " dogrulama] ";
+
+            // 1) Renk dengesi: potre ihtiyaci vs ayni renk sepet kapasitesi toplami (fazla sepetler dolgu/hamle sepetidir, sorun degil)
+            int[] need = ArrowsPixelLevelLibrary.CountPortraitColors(activeLevel.portraitRows);
+            int[] have = new int[6];
+            int truckCount = 0;
+            if (activeLevel.trucks != null)
+            {
+                foreach (var tr in activeLevel.trucks)
+                {
+                    if (tr == null) continue;
+                    if (!CellExists(tr.x, tr.z))
+                    {
+                        Debug.LogWarning(lv + "sepet grid disinda/maskeli hucrede: (" + tr.x + "," + tr.z + ") - spawn atlanir");
+                        continue;
+                    }
+                    truckCount++;
+                    for (int i = 0; i < 6; i++)
+                        if (ArrowsPixelLevelLibrary.IndexToCargo(i) == tr.color) { have[i] += Mathf.Max(1, tr.capacity); break; }
+                }
+            }
+            for (int i = 0; i < 6; i++)
+                if (need[i] > 0 && have[i] < need[i])
+                    Debug.LogWarning(lv + ArrowsPixelLevelLibrary.IndexToCargo(i) + " kapasitesi yetersiz: potre " + need[i] + " kup istiyor, sepetlerde " + have[i] + " var");
+
+            // 2) En az 1 bos hucre olmali ki kaydirma hamlesi yapilabilsin
+            int cellCount = 0;
+            for (int gx = 0; gx < gridWidth; gx++)
+                for (int gz = 0; gz < gridHeight; gz++)
+                    if (CellExists(gx, gz)) cellCount++;
+            if (truckCount >= cellCount)
+                Debug.LogWarning(lv + "BOS HUCRE YOK (" + truckCount + " sepet / " + cellCount + " hucre) - oyuncu kaydirma yapamaz");
+
+            // 3) Ilk hamle mumkun mu: bir sepet ya bos hucreye kayabilmeli ya da cikis kenarindan cikabilmeli
+            bool anyMove = false;
+            if (activeLevel.trucks != null)
+            {
+                int[] dxs = { 1, -1, 0, 0 };
+                int[] dzs = { 0, 0, 1, -1 };
+                foreach (var tr in activeLevel.trucks)
+                {
+                    if (tr == null || !CellExists(tr.x, tr.z)) continue;
+                    for (int d = 0; d < 4 && !anyMove; d++)
+                    {
+                        int nx = tr.x + dxs[d], nz = tr.z + dzs[d];
+                        bool occupied = false;
+                        foreach (var o in activeLevel.trucks)
+                            if (o != null && o != tr && o.x == nx && o.z == nz) { occupied = true; break; }
+                        if (CellExists(nx, nz) && !occupied) anyMove = true;
+                        else if (IsExitEdge(tr.x, tr.z, dxs[d], dzs[d])) anyMove = true;
+                    }
+                    if (anyMove) break;
+                }
+            }
+            if (!anyMove && truckCount > 0)
+                Debug.LogWarning(lv + "DEADLOCK: hicbir sepet ilk hamlede hareket edemiyor");
         }
 
         // ---------- Materyal ----------
@@ -1063,15 +1130,26 @@ namespace ColorCargoLoop
             }
 
             // BOARD: yuvarlak koseli cartoon tepsi (zemin; Beads Out referansi)
-            float boardX = (gridWidth - 1) * gridStepX + gridStepX + 0.28f;
-            float boardZ = (gridHeight - 1) * gridStepZ + gridStepZ + 0.28f;
-            RoundedPad("BoardBase", park.transform, new Vector3(parkingOrigin.x, 0.05f, parkingOrigin.z), boardX, boardZ, C_AREA, 0.12f, 0.32f);
+            // cellMask varsa taban HUCRE HUCRE kurulur -> T/L formunu takip eder (duvarlar zaten takip ediyor)
+            if (!HasCellMask())
+            {
+                float boardX = (gridWidth - 1) * gridStepX + gridStepX + 0.28f;
+                float boardZ = (gridHeight - 1) * gridStepZ + gridStepZ + 0.28f;
+                RoundedPad("BoardBase", park.transform, new Vector3(parkingOrigin.x, 0.05f, parkingOrigin.z), boardX, boardZ, C_AREA, 0.12f, 0.32f);
+            }
 
-            // GRID: her hucrede yuvarlak koseli koyu socket (cartoon recess)
+            // GRID: her (var olan) hucrede yuvarlak koseli koyu socket (cartoon recess)
             for (int sgx = 0; sgx < gridWidth; sgx++)
                 for (int sgz = 0; sgz < gridHeight; sgz++)
                 {
-                    Vector3 cp = CellToWorld(sgx, sgz); cp.y = 0.095f;
+                    if (!CellExists(sgx, sgz)) continue;
+                    Vector3 cp = CellToWorld(sgx, sgz);
+                    if (HasCellMask())
+                    {
+                        Vector3 bp = cp; bp.y = 0.05f;
+                        RoundedPad("BoardBase_" + sgx + "_" + sgz, park.transform, bp, gridStepX + 0.02f, gridStepZ + 0.02f, C_AREA, 0.12f, 0.10f);
+                    }
+                    cp.y = 0.095f;
                     Pad("Cell_" + sgx + "_" + sgz, park.transform, cp, gridStepX * 0.86f, gridStepZ * 0.86f, C_AREA_DARK, 0.05f);
                 }
 
@@ -1082,7 +1160,7 @@ namespace ColorCargoLoop
             if (defs == null || defs.Length == 0) defs = ArrowsPixelLevelLibrary.CreateGeneratedLevel(1).trucks;
             foreach (var d in defs)
             {
-                if (d == null || d.x < 0 || d.x >= gridWidth || d.z < 0 || d.z >= gridHeight) continue;
+                if (d == null || !CellExists(d.x, d.z)) continue; // sinir + cellMask kontrolu
                 BuildTruck(park.transform, CellToWorld(d.x, d.z), d.yaw, d.color, d.capacity, d.x, d.z);
             }
         }
@@ -1176,10 +1254,22 @@ namespace ColorCargoLoop
                 }
         }
 
-        // Ileride level maskesi (T/L form) gelirse SADECE buraya eklenecek
+        // Hucre var mi? Sinir + opsiyonel cellMask (T/L formlar). Maske satirlari USTTEN alta yazilir.
         bool CellExists(int gx, int gz)
         {
-            return gx >= 0 && gx < gridWidth && gz >= 0 && gz < gridHeight;
+            if (gx < 0 || gx >= gridWidth || gz < 0 || gz >= gridHeight) return false;
+            string[] mask = activeLevel != null ? activeLevel.cellMask : null;
+            if (mask == null || mask.Length == 0) return true;
+            int row = gridHeight - 1 - gz; // mask[0] = en ust satir (gz = gridHeight-1)
+            if (row < 0 || row >= mask.Length) return true;
+            string line = mask[row];
+            if (string.IsNullOrEmpty(line) || gx >= line.Length) return true;
+            return line[gx] != '.';
+        }
+
+        bool HasCellMask()
+        {
+            return activeLevel != null && activeLevel.cellMask != null && activeLevel.cellMask.Length > 0;
         }
 
         void TryWallEdge(Transform parent, int gx, int gz, int dx, int dz, Color c, float t, float wh, float wy)
@@ -1649,7 +1739,7 @@ namespace ColorCargoLoop
 
             int targetX = t.gx + dx;
             int targetZ = t.gz + dz;
-            if (targetX < 0 || targetX >= gridWidth || targetZ < 0 || targetZ >= gridHeight || CellOccupied(targetX, targetZ))
+            if (!CellExists(targetX, targetZ) || CellOccupied(targetX, targetZ))
             {
                 StartCoroutine(ReturnToCellRoutine(t, true));
                 return;
