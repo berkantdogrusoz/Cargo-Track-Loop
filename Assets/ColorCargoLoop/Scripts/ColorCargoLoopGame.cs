@@ -234,7 +234,6 @@ namespace ColorCargoLoop
         private Text undoBadge;
         private Text shuffleBadge;
         private Text extraBadge;
-        private Text coinLabel;
         private Text winRewardLabel;
         private Text removeAdsLabel;
         private GameObject mainMenuPanel;
@@ -804,18 +803,6 @@ namespace ColorCargoLoop
             }
 
             Transform root = canvas.transform;
-            if (coinLabel == null)
-            {
-                GameObject coinPill = CreatePill(root, "CoinPill",
-                    new Vector2(0.66f, 0.92f), new Vector2(0.84f, 0.97f),
-                    new Color(0.31f, 0.21f, 0.65f, 0.95f),
-                    new Color(0.10f, 0.06f, 0.22f, 1f));
-                CreateIcon(coinPill.transform, "CoinIcon", new Color(1f, 0.78f, 0.22f, 1f),
-                    new Vector2(0.07f, 0.18f), new Vector2(0.28f, 0.82f));
-                coinLabel = CreateText(coinPill.transform, "CoinAmount", coins.ToString(),
-                    new Vector2(0.30f, 0f), new Vector2(0.96f, 1f), 40, TextAnchor.MiddleLeft, Color.white);
-            }
-
             if (winPanel == null)
             {
                 winPanel = CreatePanel(root, "WinPanel", "Devam", "Seviye Tamam!", NextLevel,
@@ -3664,7 +3651,6 @@ namespace ColorCargoLoop
             if (sceneShuffleBadge != null) sceneShuffleBadge.text = shuffleCount.ToString();
             if (sceneExtraBadge != null) sceneExtraBadge.text = extraSlotCount.ToString();
             if (sceneUndoBadge != null) sceneUndoBadge.text = undoCount.ToString();
-            if (coinLabel != null) coinLabel.text = coins.ToString();
         }
 
         private void ClearChildren(Transform parent)

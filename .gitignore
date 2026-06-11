@@ -76,3 +76,7 @@ Thumbs.db
 # Unity MCP local files
 *.unity-mcp-local
 .unity/
+
+# Editor/agent tool caches
+.cursor/
+.utmp/
