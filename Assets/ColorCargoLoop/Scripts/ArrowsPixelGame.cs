@@ -593,6 +593,12 @@ namespace ColorCargoLoop
         [SerializeField, Range(0.4f, 1.5f)] private float basketHeightScale = 0.80f; // sepet duvar BOYU carpani (1 = eski boy; 0.8 = %20 kisa)
         [SerializeField] private float portraitCubeSize = 0.14f; // potre kup boyutu; 0.14 = sepete dolan kup ile AYNI (0 yaparsan level degeri kullanilir)
 
+        [Header("Booster Butonlari (gecici gorsel; ikon/animasyon sonra giydirilecek)")]
+        [SerializeField] private bool showBoosterButtons = true; // kapatirsan bar hic kurulmaz
+        [SerializeField] private int destroyFillerCost = 100;    // dolgu sepeti yok etme bedeli (coin)
+        [SerializeField] private int extraExitCost = 150;        // ekstra cikis kapisi bedeli (coin)
+        [SerializeField] private int shuffleCost = 200;          // sepetleri karistirma bedeli (coin)
+
         [Header("UI (Canvas'ta sen kur, sonra bagla)")]
         [SerializeField] private TMPro.TMP_Text moveText;  // kalan hamle
         [SerializeField] private TMPro.TMP_Text coinText;
@@ -633,6 +639,7 @@ namespace ColorCargoLoop
         float truckModelScale = 0.68f;
         float cameraOrthographicSize = 5.85f;
         Vector3 parkingOrigin;   // grid (0,0,0) hucresinin referans dunya merkezi (parkingArea atanmissa ondan)
+        Transform parkTransform; // runtime Parking koku (booster yeni kapi acarken duvari bulup degistirir)
         ArrowsPixelLevelDefinition activeLevel;
         ArrowsPixelExitGate[] activeExits = new ArrowsPixelExitGate[0];
 
@@ -751,6 +758,7 @@ namespace ColorCargoLoop
             if (autoSetupCamera) SetupCamera();
             UpdateMoveUI();
             UpdateCoinUI();
+            BuildBoosterButtons();
         }
 
         public void LoadLevel(int oneBasedLevel)
@@ -1113,6 +1121,7 @@ namespace ColorCargoLoop
 
             GameObject park = new GameObject("Parking");
             park.transform.SetParent(root, false);
+            parkTransform = park.transform;
             float parkSizeX = ParkingSizeX();
             float parkSizeZ = ParkingSizeZ();
             // Statik krem zemini gizle (cirkin tan margin gitsin); temiz board kuruyoruz
@@ -2097,6 +2106,269 @@ namespace ColorCargoLoop
         {
             yield return new WaitForSeconds(0.55f);
             LoadNextLevel();
+        }
+
+        // ===================== FAZ C: BOOSTER'LAR =====================
+        // UI butonlari bu public metodlari cagirir. Buton gorselleri GECICI; Berkant giydirecek.
+
+        bool TrySpendCoins(int cost)
+        {
+            if (coinAmount < cost)
+            {
+                Debug.Log("[Booster] Yetersiz coin: " + coinAmount + "/" + cost);
+                return false;
+            }
+            coinAmount -= cost;
+            UpdateCoinUI();
+            return true;
+        }
+
+        int CountRemainingCubes(CargoColor c)
+        {
+            List<GameObject> l;
+            return cubesByColor.TryGetValue(c, out l) && l != null ? l.Count : 0;
+        }
+
+        // --- 1) DOLGU SEPETI YOK ET: resmin ihtiyaci olmayan bir sepeti kaldirir -> alan acilir ---
+        public void BoosterDestroyFiller()
+        {
+            if (gstate != GameState.Playing || inputLocked) return;
+            TruckInfo victim = FindFillerTruck();
+            if (victim == null) { Debug.Log("[Booster] Yok edilecek dolgu sepeti yok"); return; }
+            if (!TrySpendCoins(destroyFillerCost)) return;
+            victim.extracted = true; // hucresi aninda bosalir, tiklanamaz olur
+            StartCoroutine(DestroyTruckRoutine(victim));
+        }
+
+        // Guvenli aday: silinince kalan ayni renk kapasite, kalan kup ihtiyacini HALA karsilamali (level kilitlenmesin)
+        TruckInfo FindFillerTruck()
+        {
+            TruckInfo best = null;
+            int bestScore = int.MinValue;
+            foreach (var t in trucks)
+            {
+                if (t == null || t.extracted || t.moving || t.root == null) continue;
+                int remainingCubes = CountRemainingCubes(t.cargo);
+                int otherCapacity = 0;
+                foreach (var o in trucks)
+                    if (o != null && o != t && !o.extracted && o.cargo == t.cargo)
+                        otherCapacity += Mathf.Max(0, o.capacity - o.filled);
+                if (otherCapacity < remainingCubes) continue; // gerekli sepet, dokunma
+                int score = remainingCubes == 0 ? 100 : 10;   // resimde hic olmayan renk en iyi aday
+                if (score > bestScore) { bestScore = score; best = t; }
+            }
+            return best;
+        }
+
+        System.Collections.IEnumerator DestroyTruckRoutine(TruckInfo t)
+        {
+            Transform tr = t.root;
+            if (tr == null) yield break;
+            Vector3 s0 = tr.localScale;
+            float dur = 0.14f, e = 0f;
+            while (e < dur && tr != null) // once hafif pop
+            {
+                e += Time.deltaTime;
+                tr.localScale = s0 * (1f + 0.16f * Mathf.Sin(Mathf.Clamp01(e / dur) * Mathf.PI));
+                yield return null;
+            }
+            dur = 0.18f; e = 0f;
+            while (e < dur && tr != null) // sonra kuculerek yok ol
+            {
+                e += Time.deltaTime;
+                tr.localScale = s0 * (1f - Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(e / dur)));
+                yield return null;
+            }
+            if (tr != null) Destroy(tr.gameObject);
+        }
+
+        // --- 2) EKSTRA CIKIS: mevcut kapilardan en uzak sinir kenarina yeni kapi acar ---
+        public void BoosterExtraExit()
+        {
+            if (gstate != GameState.Playing || inputLocked) return;
+            int bgx, bgz, bdx, bdz;
+            if (!FindNewExitEdge(out bgx, out bgz, out bdx, out bdz)) { Debug.Log("[Booster] Yeni kapi icin uygun kenar yok"); return; }
+            if (!TrySpendCoins(extraExitCost)) return;
+
+            var list = new List<ArrowsPixelExitGate>(activeExits ?? new ArrowsPixelExitGate[0]);
+            list.Add(new ArrowsPixelExitGate { x = bgx, z = bgz, direction = VectorToExitDirection(bdx, bdz) });
+            activeExits = list.ToArray(); // activeLevel.exits'e DOKUNMUYORUZ -> level verisi kalici bozulmaz
+
+            if (parkTransform != null)
+            {
+                Transform wall = parkTransform.Find("Wall_" + bgx + "_" + bgz + "_" + bdx + "_" + bdz);
+                if (wall != null) Destroy(wall.gameObject);
+                Vector3 dir = new Vector3(bdx, 0f, bdz);
+                const float wt = 0.17f; // BuildModularWalls ile ayni duvar kalinligi
+                Vector3 center = CellToWorld(bgx, bgz) + dir * ((bdx != 0 ? gridStepX : gridStepZ) * 0.5f + wt * 0.5f);
+                center.y = 0.16f;
+                BuildGateMarker(parkTransform, center, dir, wt);
+            }
+        }
+
+        bool FindNewExitEdge(out int bgx, out int bgz, out int bdx, out int bdz)
+        {
+            bgx = bgz = bdx = bdz = 0;
+            int[] dxs = { 1, -1, 0, 0 };
+            int[] dzs = { 0, 0, 1, -1 };
+            int bestScore = int.MinValue;
+            bool found = false;
+            for (int gx = 0; gx < gridWidth; gx++)
+                for (int gz = 0; gz < gridHeight; gz++)
+                {
+                    if (!CellExists(gx, gz)) continue;
+                    for (int d = 0; d < 4; d++)
+                    {
+                        if (CellExists(gx + dxs[d], gz + dzs[d])) continue; // sinir kenari degil
+                        if (IsExitEdge(gx, gz, dxs[d], dzs[d])) continue;   // zaten kapi var
+                        int score = int.MaxValue;
+                        if (activeExits != null)
+                            foreach (var g in activeExits)
+                                if (g != null) score = Mathf.Min(score, Mathf.Abs(g.x - gx) + Mathf.Abs(g.z - gz));
+                        if (score > bestScore) { bestScore = score; bgx = gx; bgz = gz; bdx = dxs[d]; bdz = dzs[d]; found = true; }
+                    }
+                }
+            return found;
+        }
+
+        ArrowsPixelExitDirection VectorToExitDirection(int dx, int dz)
+        {
+            if (dx > 0) return ArrowsPixelExitDirection.Right;
+            if (dx < 0) return ArrowsPixelExitDirection.Left;
+            if (dz > 0) return ArrowsPixelExitDirection.Up;
+            return ArrowsPixelExitDirection.Down;
+        }
+
+        // --- 3) KARISTIR: sepetlerin yerlerini permute eder; sonrasinda en az 1 hamle garantili ---
+        public void BoosterShuffle()
+        {
+            if (gstate != GameState.Playing || inputLocked) return;
+            List<TruckInfo> act = new List<TruckInfo>();
+            foreach (var t in trucks) if (t != null && !t.extracted && !t.moving && t.root != null) act.Add(t);
+            if (act.Count < 2) { Debug.Log("[Booster] Karistirilacak yeterli sepet yok"); return; }
+            if (!TrySpendCoins(shuffleCost)) return;
+
+            var cells = new List<Vector2Int>();
+            foreach (var t in act) cells.Add(new Vector2Int(t.gx, t.gz));
+            var order = new List<int>();
+            for (int i = 0; i < cells.Count; i++) order.Add(i);
+
+            for (int attempt = 0; attempt < 16; attempt++)
+            {
+                for (int i = order.Count - 1; i > 0; i--) // Fisher-Yates
+                {
+                    int j = Random.Range(0, i + 1);
+                    int tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+                }
+                if (ShuffleHasMove(act, cells, order)) break;
+            }
+
+            for (int i = 0; i < act.Count; i++)
+            {
+                act[i].gx = cells[order[i]].x;
+                act[i].gz = cells[order[i]].y;
+            }
+            StartCoroutine(ShuffleAnimRoutine(act));
+        }
+
+        bool ShuffleHasMove(List<TruckInfo> act, List<Vector2Int> cells, List<int> order)
+        {
+            int[] dxs = { 1, -1, 0, 0 };
+            int[] dzs = { 0, 0, 1, -1 };
+            for (int i = 0; i < act.Count; i++)
+            {
+                int gx = cells[order[i]].x, gz = cells[order[i]].y;
+                for (int d = 0; d < 4; d++)
+                {
+                    int nx = gx + dxs[d], nz = gz + dzs[d];
+                    bool occupied = false;
+                    for (int k = 0; k < act.Count; k++)
+                        if (k != i && cells[order[k]].x == nx && cells[order[k]].y == nz) { occupied = true; break; }
+                    if (CellExists(nx, nz) && !occupied) return true;
+                    if (IsExitEdge(gx, gz, dxs[d], dzs[d])) return true;
+                }
+            }
+            return false;
+        }
+
+        System.Collections.IEnumerator ShuffleAnimRoutine(List<TruckInfo> act)
+        {
+            inputLocked = true;
+            var from = new List<Vector3>();
+            var to = new List<Vector3>();
+            foreach (var t in act)
+            {
+                from.Add(t.root.position);
+                Vector3 target = CellToWorld(t.gx, t.gz);
+                target.y = t.root.position.y;
+                to.Add(target);
+            }
+            float dur = 0.38f, e = 0f;
+            while (e < dur)
+            {
+                e += Time.deltaTime;
+                float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(e / dur));
+                float hop = Mathf.Sin(u * Mathf.PI) * 0.55f;
+                for (int i = 0; i < act.Count; i++)
+                    if (act[i].root != null) act[i].root.position = Vector3.Lerp(from[i], to[i], u) + Vector3.up * hop;
+                yield return null;
+            }
+            for (int i = 0; i < act.Count; i++)
+                if (act[i].root != null) act[i].root.position = to[i];
+            inputLocked = false;
+        }
+
+        // --- GECICI UI: Canvas altina 3 booster butonu kurar (Berkant ikon/animasyon giydirecek) ---
+        void BuildBoosterButtons()
+        {
+            if (!showBoosterButtons) return;
+            Canvas cv = FindObjectOfType<Canvas>();
+            if (cv == null) return;
+            Transform old = cv.transform.Find("BoosterBar");
+            if (old != null) Destroy(old.gameObject);
+
+            GameObject bar = new GameObject("BoosterBar", typeof(RectTransform));
+            bar.transform.SetParent(cv.transform, false);
+            RectTransform rt = bar.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0.5f, 0f);
+            rt.anchorMax = new Vector2(0.5f, 0f);
+            rt.pivot = new Vector2(0.5f, 0f);
+            rt.anchoredPosition = new Vector2(0f, 26f);
+            rt.sizeDelta = new Vector2(580f, 104f);
+
+            CreateBoosterButton(bar.transform, 0, "YOK ET", destroyFillerCost, BoosterDestroyFiller);
+            CreateBoosterButton(bar.transform, 1, "+KAPI", extraExitCost, BoosterExtraExit);
+            CreateBoosterButton(bar.transform, 2, "KARISTIR", shuffleCost, BoosterShuffle);
+        }
+
+        void CreateBoosterButton(Transform parent, int index, string label, int cost, UnityEngine.Events.UnityAction onClick)
+        {
+            GameObject go = new GameObject("Booster_" + label, typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(UnityEngine.UI.Button));
+            go.transform.SetParent(parent, false);
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0f, 0.5f);
+            rt.anchorMax = new Vector2(0f, 0.5f);
+            rt.pivot = new Vector2(0f, 0.5f);
+            rt.sizeDelta = new Vector2(180f, 96f);
+            rt.anchoredPosition = new Vector2(8f + index * 196f, 0f);
+            UnityEngine.UI.Image img = go.GetComponent<UnityEngine.UI.Image>();
+            img.color = new Color(0.99f, 0.90f, 0.70f, 0.96f); // cerceve altin tonu (gecici gorsel)
+            UnityEngine.UI.Button btn = go.GetComponent<UnityEngine.UI.Button>();
+            btn.onClick.AddListener(onClick);
+
+            GameObject txt = new GameObject("Label", typeof(RectTransform));
+            txt.transform.SetParent(go.transform, false);
+            TMPro.TextMeshProUGUI tm = txt.AddComponent<TMPro.TextMeshProUGUI>();
+            tm.text = label + "\n<size=64%>" + cost + " coin</size>";
+            tm.alignment = TMPro.TextAlignmentOptions.Center;
+            tm.fontSize = 30f;
+            tm.color = new Color(0.45f, 0.30f, 0.15f);
+            tm.raycastTarget = false;
+            RectTransform trt = txt.GetComponent<RectTransform>();
+            trt.anchorMin = Vector2.zero;
+            trt.anchorMax = Vector2.one;
+            trt.offsetMin = Vector2.zero;
+            trt.offsetMax = Vector2.zero;
         }
 
         // UI: yazilar artik Canvas'tan (TextMeshPro). OnGUI kaldirildi; referanslar atanmazsa sessizce gecer.

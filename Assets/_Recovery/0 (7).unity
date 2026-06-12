@@ -7052,10 +7052,6 @@ MonoBehaviour:
   autoSetupCamera: 1
   basketHeightScale: 0.4
   portraitCubeSize: 0.14
-  showBoosterButtons: 1
-  destroyFillerCost: 100
-  extraExitCost: 150
-  shuffleCost: 200
   moveText: {fileID: 756493489}
   coinText: {fileID: 1119418304}
   coinAmount: 625
