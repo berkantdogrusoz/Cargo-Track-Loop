@@ -1085,98 +1085,6 @@ Material:
     - _ShadowColor: {r: 0.41999996, g: 0.35999998, b: 0.7, a: 1}
   m_BuildTextureStacks: []
   m_AllowLocking: 1
---- !u!1 &103076764
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 103076765}
-  - component: {fileID: 103076767}
-  - component: {fileID: 103076766}
-  - component: {fileID: 103076768}
-  m_Layer: 5
-  m_Name: logo
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!224 &103076765
-RectTransform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 103076764}
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0.00012906}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 1766154598}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
-  m_AnchorMin: {x: 0.5, y: 0.573}
-  m_AnchorMax: {x: 0.5, y: 0.573}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 794.37, y: 500.88}
-  m_Pivot: {x: 0.5, y: 0.5}
---- !u!114 &103076766
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 103076764}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: fe87c0e1cc204ed48ad3b37840f39efc, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: UnityEngine.UI::UnityEngine.UI.Image
-  m_Material: {fileID: 0}
-  m_Color: {r: 1, g: 1, b: 1, a: 1}
-  m_RaycastTarget: 1
-  m_RaycastPadding: {x: 0, y: 0, z: 0, w: 0}
-  m_Maskable: 1
-  m_OnCullStateChanged:
-    m_PersistentCalls:
-      m_Calls: []
-  m_Sprite: {fileID: -164636774, guid: b64a9645daa9a5f4b9f0c3b480254f98, type: 3}
-  m_Type: 0
-  m_PreserveAspect: 0
-  m_FillCenter: 1
-  m_FillMethod: 4
-  m_FillAmount: 1
-  m_FillClockwise: 1
-  m_FillOrigin: 0
-  m_UseSpriteMesh: 0
-  m_PixelsPerUnitMultiplier: 1
---- !u!222 &103076767
-CanvasRenderer:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 103076764}
-  m_CullTransparentMesh: 1
---- !u!114 &103076768
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 103076764}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 0cacacd26f24b7940a145b688d6391c6, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ColorCargoLoop.UIPopIn
-  duration: 0.5
-  startScale: 0
-  overshoot: 2.2
-  useUnscaledTime: 1
 --- !u!21 &110874544
 Material:
   serializedVersion: 8
@@ -6751,7 +6659,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.83000004}
   m_AnchorMax: {x: 0.5, y: 0.83000004}
-  m_AnchoredPosition: {x: 0, y: 2.590088}
+  m_AnchoredPosition: {x: 0, y: 2.5900269}
   m_SizeDelta: {x: 200, y: 165.22}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1155045223
@@ -7822,7 +7730,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &1321288081
 Transform:
   m_ObjectHideFlags: 0
@@ -7967,7 +7875,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.799, y: 0.92112535}
   m_AnchorMax: {x: 0.799, y: 0.92112535}
-  m_AnchoredPosition: {x: 0.4000244, y: -0.8000488}
+  m_AnchoredPosition: {x: 0.4000244, y: -0.7999878}
   m_SizeDelta: {x: 232.51, y: 86.10199}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1330481311
@@ -8129,7 +8037,7 @@ MonoBehaviour:
   useGeneratedLevels: 1
   levels: []
   moveLimit: 8
-  backgroundColor: {r: 0.8784314, g: 0.7607843, b: 0.6, a: 1}
+  backgroundColor: {r: 1, g: 0.90119547, b: 0.7688679, a: 1}
   areaColor: {r: 0.8784314, g: 0.7607843, b: 0.6, a: 1}
   areaDarkColor: {r: 0.72156864, g: 0.6, b: 0.4509804, a: 1}
   wallColor: {r: 0.93, g: 0.94, b: 1, a: 1}
@@ -9794,14 +9702,13 @@ GameObject:
   - component: {fileID: 1766154598}
   - component: {fileID: 1766154600}
   - component: {fileID: 1766154599}
-  - component: {fileID: 1766154601}
   m_Layer: 5
   m_Name: win panel
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1766154598
 RectTransform:
   m_ObjectHideFlags: 0
@@ -9813,8 +9720,7 @@ RectTransform:
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
-  m_Children:
-  - {fileID: 103076765}
+  m_Children: []
   m_Father: {fileID: 1927251718}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
@@ -9860,33 +9766,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1766154597}
   m_CullTransparentMesh: 1
---- !u!114 &1766154601
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1766154597}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: e3b525f0d2fa13c44b4d3beb7260d95e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Assembly-CSharp::ColorCargoLoop.WinFireworks
-  burstPoints:
-  - {x: -230, y: 170}
-  - {x: 235, y: 240}
-  - {x: 0, y: -40}
-  - {x: -140, y: -180}
-  - {x: 170, y: -150}
-  burstInterval: 0.45
-  repeatEvery: 2.2
-  particlesPerBurst: 150
-  spread: 520
-  particleSize: 55
-  lifetime: 1.1
-  gravity: 0.07
-  pixelsToWorld: 0.0061
-  frontDistance: 5
 --- !u!1 &1768177959
 GameObject:
   m_ObjectHideFlags: 0
@@ -10534,9 +10413,9 @@ RectTransform:
   - {fileID: 1155045222}
   - {fileID: 1632492975}
   - {fileID: 1330481310}
-  - {fileID: 1098401086}
   - {fileID: 1766154598}
   - {fileID: 275154953}
+  - {fileID: 1098401086}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}

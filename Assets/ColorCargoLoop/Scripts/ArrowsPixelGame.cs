@@ -2188,6 +2188,15 @@ namespace ColorCargoLoop
             }
         }
 
+        // TEST aracı: Play modunda component'e sag tikla -> win panelini goster (logo pop + havai fisek denemesi)
+        [ContextMenu("TEST: Win panelini goster")]
+        void DebugShowWin()
+        {
+            gstate = GameState.Won;
+            inputLocked = true;
+            ShowEndPanel(winPanel, true);
+        }
+
         // Panel atanmissa goster (Berkant tasarlar; butonlari LoadNextLevel/RestartLevel'e baglar).
         // Atanmamissa eski davranis: win -> sonraki level, lose -> restart (geriye donuk uyum).
         void ShowEndPanel(GameObject panel, bool win)
