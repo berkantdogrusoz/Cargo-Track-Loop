@@ -671,9 +671,18 @@ namespace ColorCargoLoop
 
         [Header("Palet / Cevre Renkleri (Inspector'dan ayarla; Play'de uygulanir)")]
         [SerializeField] private Color backgroundColor = new Color(0.55f, 0.59f, 0.72f); // arka plan (kamera + zemin plani)
-        [SerializeField] private Color areaColor       = new Color(0.55f, 0.59f, 0.72f); // tepsi: board / slot / potre
-        [SerializeField] private Color areaDarkColor   = new Color(0.45f, 0.49f, 0.62f); // grid soket (koyu girinti)
+        [SerializeField] private Color areaColor       = new Color(0.88f, 0.76f, 0.60f); // tepsi: board / slot / potre (ten rengi)
+        [SerializeField] private Color areaDarkColor   = new Color(0.72f, 0.60f, 0.45f); // grid soket (koyu ten girinti)
         [SerializeField] private Color wallColor       = new Color(0.93f, 0.94f, 1.00f); // moduler duvar + kapi postu
+
+        [Header("Toon Gorunum (cartoon outline + golge; canli)")]
+        [SerializeField] private Color toonOutlineColor = new Color(0.11f, 0.08f, 0.17f, 1f); // cizgi rengi (koyu)
+        [SerializeField, Range(0f, 0.08f)] private float cubeOutline   = 0.052f; // potre kupleri (kalin cartoon cizgi)
+        [SerializeField, Range(0f, 0.08f)] private float basketOutline = 0.036f; // sepetler
+        [SerializeField, Range(0f, 0.08f)] private float envOutline    = 0.015f; // tepsi/soket/duvar (hafif cizgi)
+        [SerializeField, Range(0f, 1f)] private float toonShade = 0.66f;         // golge bandi sertligi (kontrast)
+        [SerializeField, Range(0f, 1f)] private float toonRamp  = 0.50f;         // lit/golge esigi
+        [SerializeField, Range(0f, 1f)] private float colorVividness = 0.24f;    // renk canliligi (doygunluk artisi -> cartoon)
 
         Transform root;
         ColorCargoLoopGame oldGame;   // birebir uçan kup mesh/material kaynagi
@@ -707,15 +716,16 @@ namespace ColorCargoLoop
                 var pm = cubeRenderer != null && cubeRenderer.sharedMaterial != null ? new Material(cubeRenderer.sharedMaterial) : null;
                 if (pm != null)
                 {
-                    if (pm.HasProperty("_OutlineColor")) pm.SetColor("_OutlineColor", new Color(0.055f, 0.045f, 0.09f, 1f));
-                    if (pm.HasProperty("_OutlineWidth")) pm.SetFloat("_OutlineWidth", 0.034f);
+                    if (pm.HasProperty("_OutlineColor")) pm.SetColor("_OutlineColor", toonOutlineColor);
+                    if (pm.HasProperty("_OutlineWidth")) pm.SetFloat("_OutlineWidth", cubeOutline);
                     if (pm.HasProperty("_ShadowColor")) pm.SetColor("_ShadowColor", Color.Lerp(CharColor(ch), new Color(0.07f, 0.05f, 0.12f), 0.58f));
-                    if (pm.HasProperty("_RampThreshold")) pm.SetFloat("_RampThreshold", 0.56f);
+                    if (pm.HasProperty("_RampThreshold")) pm.SetFloat("_RampThreshold", toonRamp);
                     if (pm.HasProperty("_RimStrength")) pm.SetFloat("_RimStrength", 0.30f);
                     if (pm.HasProperty("_RimColor")) pm.SetColor("_RimColor", new Color(1f, 0.94f, 0.82f));
                     if (pm.HasProperty("_HighlightStrength")) pm.SetFloat("_HighlightStrength", 0.72f);
                     if (pm.HasProperty("_HighlightColor")) pm.SetColor("_HighlightColor", new Color(1f, 0.98f, 0.88f));
-                    if (pm.HasProperty("_ShadeStrength")) pm.SetFloat("_ShadeStrength", 0.50f);
+                    if (pm.HasProperty("_ShadeStrength")) pm.SetFloat("_ShadeStrength", toonShade);
+                    if (pm.HasProperty("_Color")) pm.SetColor("_Color", Vivid(pm.GetColor("_Color"))); // canli renk
                     cubeRenderer.sharedMaterial = pm;
                 }
             }
@@ -889,6 +899,19 @@ namespace ColorCargoLoop
                 Debug.LogWarning(lv + "DEADLOCK: hicbir sepet ilk hamlede hareket edemiyor");
         }
 
+        // Renk canliligi: doygunlugu artirir (cartoon "canli" his). colorVividness=0 ise dokunmaz.
+        Color Vivid(Color c)
+        {
+            if (colorVividness <= 0.001f) return c;
+            float h, s, v;
+            Color.RGBToHSV(c, out h, out s, out v);
+            s = Mathf.Clamp01(s * (1f + colorVividness));
+            v = Mathf.Clamp01(v * (1f + colorVividness * 0.12f));
+            Color o = Color.HSVToRGB(h, s, v);
+            o.a = c.a;
+            return o;
+        }
+
         // ---------- Materyal ----------
         Material Mat(Color c)
         {
@@ -900,7 +923,11 @@ namespace ColorCargoLoop
             m = new Material(sh) { name = "APX_" + key };
             if (m.HasProperty("_Color")) m.SetColor("_Color", c);
             if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", Color.white);
-            if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", 0f);
+            // Toon: ortam objelerine hafif cartoon cizgi + golge bandi (Inspector'dan ayarlanir)
+            if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", envOutline);
+            if (m.HasProperty("_OutlineColor")) m.SetColor("_OutlineColor", toonOutlineColor);
+            if (m.HasProperty("_ShadeStrength")) m.SetFloat("_ShadeStrength", toonShade);
+            if (m.HasProperty("_RampThreshold")) m.SetFloat("_RampThreshold", toonRamp);
             m.color = c;
             matCache[key] = m;
             return m;
@@ -1520,16 +1547,17 @@ namespace ColorCargoLoop
         // Color Block Jam / Marble Sort tarzi toon SEPET (kupler icine dolar; useBasketStyle ile acilir)
         void BuildBasket(Transform parent, Color color)
         {
+            color = Vivid(color); // canli renk (cartoon)
             Shader sh = Shader.Find("Color Cargo Loop/Toon Plastic");
             if (sh == null) sh = Shader.Find("Universal Render Pipeline/Lit");
             Material m = new Material(sh) { name = "BasketBody" };
             if (m.HasProperty("_Color")) m.SetColor("_Color", color);
             if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", Color.white);
-            if (m.HasProperty("_OutlineColor")) m.SetColor("_OutlineColor", new Color(0.06f, 0.05f, 0.10f, 1f));
-            if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", 0.020f);
+            if (m.HasProperty("_OutlineColor")) m.SetColor("_OutlineColor", toonOutlineColor);
+            if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", basketOutline);
             if (m.HasProperty("_ShadowColor")) m.SetColor("_ShadowColor", Color.Lerp(color, new Color(0.07f, 0.05f, 0.12f), 0.55f));
-            if (m.HasProperty("_RampThreshold")) m.SetFloat("_RampThreshold", 0.55f);
-            if (m.HasProperty("_ShadeStrength")) m.SetFloat("_ShadeStrength", 0.50f);
+            if (m.HasProperty("_RampThreshold")) m.SetFloat("_RampThreshold", toonRamp);
+            if (m.HasProperty("_ShadeStrength")) m.SetFloat("_ShadeStrength", toonShade);
             if (m.HasProperty("_RimColor")) m.SetColor("_RimColor", new Color(1f, 0.96f, 0.86f));
             if (m.HasProperty("_RimStrength")) m.SetFloat("_RimStrength", 0.28f);
             if (m.HasProperty("_HighlightColor")) m.SetColor("_HighlightColor", new Color(1f, 0.99f, 0.92f));
