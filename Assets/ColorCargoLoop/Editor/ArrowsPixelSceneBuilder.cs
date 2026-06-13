@@ -2,6 +2,7 @@ using ColorCargoLoop;
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace ColorCargoLoopEditor
 {
@@ -95,6 +96,95 @@ namespace ColorCargoLoopEditor
             Debug.Log("[Arrows] Alanlar kuruldu ve ArrowsPixelGame'e baglandi: PictureArea / Slot_0..2 / ParkingArea. " +
                       "Hiyerarsiden tasiyabilirsin; Play'de kupler resme, tirlar parking grid'ine dolar. " +
                       "UI (Hamle / Coin / Win / Lose) alanlarini Canvas'tan sen baglayacaksin.");
+        }
+
+        // ----------------------------------------------------------------------------------
+        // BOOSTER UI: butonlari Canvas'ta KALICI GameObject olarak kurar (Berkant gorsel verir),
+        // onClick koddan baglanir. Aspect uyumu icin Canvas Scaler'i da ayarlar.
+        // ----------------------------------------------------------------------------------
+        [MenuItem("Color Cargo Loop/Build Booster UI")]
+        public static void BuildBoosterUI()
+        {
+            ArrowsPixelGame game = Object.FindFirstObjectByType<ArrowsPixelGame>();
+            if (game == null) { Debug.LogError("[Booster UI] ArrowsPixelGame sahnede yok."); return; }
+            Canvas cv = Object.FindFirstObjectByType<Canvas>();
+            if (cv == null) { Debug.LogError("[Booster UI] Canvas sahnede yok."); return; }
+
+            // Aspect: yalnizca dogru ayarli DEGILSE degistir (mevcut UI'yi bozmamak icin)
+            CanvasScaler scaler = cv.GetComponentInParent<CanvasScaler>();
+            if (scaler == null) scaler = cv.GetComponent<CanvasScaler>();
+            if (scaler == null) scaler = cv.gameObject.AddComponent<CanvasScaler>();
+            if (scaler.uiScaleMode != CanvasScaler.ScaleMode.ScaleWithScreenSize)
+            {
+                scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
+                scaler.referenceResolution = new Vector2(1080f, 1920f);
+                scaler.screenMatchMode = CanvasScaler.ScreenMatchMode.MatchWidthOrHeight;
+                scaler.matchWidthOrHeight = 0.5f;
+                Debug.Log("[Booster UI] Canvas Scaler -> Scale With Screen Size 1080x1920 (match 0.5) ayarlandi.");
+            }
+
+            Transform old = cv.transform.Find("BoosterBar");
+            if (old != null) Object.DestroyImmediate(old.gameObject);
+
+            GameObject bar = new GameObject("BoosterBar", typeof(RectTransform));
+            Undo.RegisterCreatedObjectUndo(bar, "Build Booster UI");
+            bar.transform.SetParent(cv.transform, false);
+            RectTransform brt = bar.GetComponent<RectTransform>();
+            brt.anchorMin = new Vector2(0.5f, 0f);
+            brt.anchorMax = new Vector2(0.5f, 0f);
+            brt.pivot = new Vector2(0.5f, 0f);
+            brt.anchoredPosition = new Vector2(0f, 90f);   // ekran altindan yukari (safe-area payi)
+            brt.sizeDelta = new Vector2(1000f, 230f);
+
+            Button b0 = CreateUIButton(bar.transform, "Booster_Destroy",  "YOK ET",   0);
+            Button b1 = CreateUIButton(bar.transform, "Booster_ExtraExit","+KAPI",    1);
+            Button b2 = CreateUIButton(bar.transform, "Booster_Shuffle",  "KARISTIR", 2);
+
+            SerializedObject so = new SerializedObject(game);
+            SetRef(so, "destroyFillerButton", b0);
+            SetRef(so, "extraExitButton", b1);
+            SetRef(so, "shuffleButton", b2);
+            SerializedProperty sbb = so.FindProperty("showBoosterButtons");
+            if (sbb != null) sbb.boolValue = false; // artik sahnedeki kalici butonlar kullanilacak
+            so.ApplyModifiedPropertiesWithoutUndo();
+
+            EditorUtility.SetDirty(game);
+            EditorSceneManager.MarkSceneDirty(game.gameObject.scene);
+            Selection.activeGameObject = bar;
+            Debug.Log("[Booster UI] BoosterBar kuruldu ve ArrowsPixelGame'e baglandi. " +
+                      "Her butonun Image'ina kendi gorselini ver; onClick Play'de koddan baglanir.");
+        }
+
+        // Bar genisligine gore oransal anchorlanmis buton (aspect degisince butonlar da olceklenir)
+        static Button CreateUIButton(Transform parent, string name, string label, int index)
+        {
+            float[] mins = { 0.00f, 0.34f, 0.68f };
+            float[] maxs = { 0.32f, 0.66f, 1.00f };
+            GameObject go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
+            go.transform.SetParent(parent, false);
+            RectTransform rt = go.GetComponent<RectTransform>();
+            rt.anchorMin = new Vector2(mins[index], 0f);
+            rt.anchorMax = new Vector2(maxs[index], 1f);
+            rt.offsetMin = Vector2.zero;
+            rt.offsetMax = Vector2.zero;
+            Image img = go.GetComponent<Image>();
+            img.color = new Color(0.99f, 0.90f, 0.70f, 0.98f); // gecici placeholder rengi (sprite verince degisir)
+
+            GameObject lbl = new GameObject("Label", typeof(RectTransform));
+            lbl.transform.SetParent(go.transform, false);
+            TMPro.TextMeshProUGUI tm = lbl.AddComponent<TMPro.TextMeshProUGUI>();
+            tm.text = label;
+            tm.alignment = TMPro.TextAlignmentOptions.Center;
+            tm.fontSize = 44f;
+            tm.color = new Color(0.45f, 0.30f, 0.15f);
+            tm.raycastTarget = false;
+            RectTransform lrt = lbl.GetComponent<RectTransform>();
+            lrt.anchorMin = Vector2.zero;
+            lrt.anchorMax = Vector2.one;
+            lrt.offsetMin = Vector2.zero;
+            lrt.offsetMax = Vector2.zero;
+
+            return go.GetComponent<Button>();
         }
 
         static void SetRef(SerializedObject so, string prop, Object value)

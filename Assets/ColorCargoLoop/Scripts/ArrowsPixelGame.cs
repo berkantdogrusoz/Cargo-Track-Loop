@@ -594,10 +594,15 @@ namespace ColorCargoLoop
         [SerializeField] private float portraitCubeSize = 0.14f; // potre kup boyutu; 0.14 = sepete dolan kup ile AYNI (0 yaparsan level degeri kullanilir)
 
         [Header("Booster Butonlari (gecici gorsel; ikon/animasyon sonra giydirilecek)")]
-        [SerializeField] private bool showBoosterButtons = true; // kapatirsan bar hic kurulmaz
+        [SerializeField] private bool showBoosterButtons = true; // kapatirsan kod GECICI bar kurmaz (sahnedeki butonlar varsa onlar kullanilir)
         [SerializeField] private int destroyFillerCost = 100;    // dolgu sepeti yok etme bedeli (coin)
         [SerializeField] private int extraExitCost = 150;        // ekstra cikis kapisi bedeli (coin)
         [SerializeField] private int shuffleCost = 200;          // sepetleri karistirma bedeli (coin)
+        [Space(4)]
+        [Tooltip("Sahnedeki kalici butonlar (menu 'Build Booster UI' doldurur). Atanmissa kod runtime buton KURMAZ; sadece onClick'i baglar. Gorselleri sen verirsin.")]
+        [SerializeField] private UnityEngine.UI.Button destroyFillerButton; // bos = kod gecici buton kurar
+        [SerializeField] private UnityEngine.UI.Button extraExitButton;
+        [SerializeField] private UnityEngine.UI.Button shuffleButton;
 
         [Header("UI (Canvas'ta sen kur, sonra bagla)")]
         [SerializeField] private TMPro.TMP_Text moveText;  // kalan hamle
@@ -2318,9 +2323,27 @@ namespace ColorCargoLoop
             inputLocked = false;
         }
 
-        // --- GECICI UI: Canvas altina 3 booster butonu kurar (Berkant ikon/animasyon giydirecek) ---
+        bool boosterWired;
+
+        // Sahnede atanmis kalici butonlari (menu 'Build Booster UI' kurar) onClick'e baglar.
+        // Berkant gorselleri verir; davranis koddan gelir. Bir kere baglanir (level reload'da cogalmaz).
+        bool TryWireSceneBoosterButtons()
+        {
+            if (destroyFillerButton == null && extraExitButton == null && shuffleButton == null) return false;
+            if (!boosterWired)
+            {
+                if (destroyFillerButton != null) destroyFillerButton.onClick.AddListener(BoosterDestroyFiller);
+                if (extraExitButton != null) extraExitButton.onClick.AddListener(BoosterExtraExit);
+                if (shuffleButton != null) shuffleButton.onClick.AddListener(BoosterShuffle);
+                boosterWired = true;
+            }
+            return true;
+        }
+
+        // --- GECICI UI: sahnede atanmis buton yoksa Canvas altina 3 placeholder buton kurar ---
         void BuildBoosterButtons()
         {
+            if (TryWireSceneBoosterButtons()) return; // sahnedeki gercek butonlar varsa onlari kullan
             if (!showBoosterButtons) return;
             Canvas cv = FindObjectOfType<Canvas>();
             if (cv == null) return;
