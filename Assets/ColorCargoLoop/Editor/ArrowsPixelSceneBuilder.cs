@@ -183,25 +183,62 @@ namespace ColorCargoLoopEditor
             lrt.anchorMax = Vector2.one;
             lrt.offsetMin = Vector2.zero;
             lrt.offsetMax = Vector2.zero;
-
-            // Adet rozeti (sag-ust) -> kod "x3"...".x0" yazar; adet 0 olunca buton kilitlenir.
-            // Bunu da kendi gorseline gore tasarlayabilirsin; ismi "CountBadge" kalsin yeter.
-            GameObject badge = new GameObject("CountBadge", typeof(RectTransform));
-            badge.transform.SetParent(go.transform, false);
-            TMPro.TextMeshProUGUI bt = badge.AddComponent<TMPro.TextMeshProUGUI>();
-            bt.text = "x3";
-            bt.alignment = TMPro.TextAlignmentOptions.TopRight;
-            bt.fontSize = 34f;
-            bt.fontStyle = TMPro.FontStyles.Bold;
-            bt.color = new Color(0.85f, 0.22f, 0.25f);
-            bt.raycastTarget = false;
-            RectTransform brt = badge.GetComponent<RectTransform>();
-            brt.anchorMin = Vector2.zero;
-            brt.anchorMax = Vector2.one;
-            brt.offsetMin = Vector2.zero;
-            brt.offsetMax = new Vector2(-12f, -6f);
-
             return go.GetComponent<Button>();
+        }
+
+        // ----------------------------------------------------------------------------------
+        // ADET YAZILARI: mevcut booster butonlarinin altina "CountText" TMP olusturur ve
+        // ArrowsPixelGame'in adet-text slotlarina ATAR. Gorseller/sprite'lar bozulmaz.
+        // Olusan CountText objelerini Berkant istedigi yere tasir / stiller / kendi TMP'siyle degistirir.
+        // ----------------------------------------------------------------------------------
+        [MenuItem("Color Cargo Loop/Wire Booster Count Texts")]
+        public static void WireBoosterCountTexts()
+        {
+            ArrowsPixelGame game = Object.FindFirstObjectByType<ArrowsPixelGame>();
+            if (game == null) { Debug.LogError("[Booster] ArrowsPixelGame sahnede yok."); return; }
+            SerializedObject so = new SerializedObject(game);
+            int n = 0;
+            n += WireOneCountText(so, "destroyFillerButton", "destroyFillerCountText") ? 1 : 0;
+            n += WireOneCountText(so, "extraExitButton", "extraExitCountText") ? 1 : 0;
+            n += WireOneCountText(so, "shuffleButton", "shuffleCountText") ? 1 : 0;
+            so.ApplyModifiedPropertiesWithoutUndo();
+            EditorUtility.SetDirty(game);
+            EditorSceneManager.MarkSceneDirty(game.gameObject.scene);
+            Debug.Log("[Booster] " + n + " adet yazisi (CountText) olusturuldu/atandi. Konum & stil sende - CountText objelerini tasi.");
+        }
+
+        static bool WireOneCountText(SerializedObject so, string btnProp, string txtProp)
+        {
+            SerializedProperty bp = so.FindProperty(btnProp);
+            if (bp == null || bp.objectReferenceValue == null) return false;
+            Button btn = bp.objectReferenceValue as Button;
+            if (btn == null) return false;
+
+            Transform existing = btn.transform.Find("CountText");
+            TMPro.TextMeshProUGUI tm;
+            if (existing == null)
+            {
+                GameObject go = new GameObject("CountText", typeof(RectTransform));
+                Undo.RegisterCreatedObjectUndo(go, "Wire Count Text");
+                go.transform.SetParent(btn.transform, false);
+                tm = go.AddComponent<TMPro.TextMeshProUGUI>();
+                tm.text = "x3";
+                tm.alignment = TMPro.TextAlignmentOptions.BottomRight;
+                tm.fontSize = 40f;
+                tm.fontStyle = TMPro.FontStyles.Bold;
+                tm.color = new Color(1f, 0.93f, 0.30f);
+                tm.raycastTarget = false;
+                RectTransform rt = go.GetComponent<RectTransform>();
+                rt.anchorMin = Vector2.zero;
+                rt.anchorMax = Vector2.one;
+                rt.offsetMin = Vector2.zero;
+                rt.offsetMax = Vector2.zero;
+            }
+            else tm = existing.GetComponent<TMPro.TextMeshProUGUI>();
+
+            SerializedProperty tp = so.FindProperty(txtProp);
+            if (tp != null) tp.objectReferenceValue = tm;
+            return true;
         }
 
         static void SetRef(SerializedObject so, string prop, Object value)

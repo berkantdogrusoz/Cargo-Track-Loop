@@ -603,6 +603,11 @@ namespace ColorCargoLoop
         [SerializeField] private UnityEngine.UI.Button destroyFillerButton; // bos = kod gecici buton kurar
         [SerializeField] private UnityEngine.UI.Button extraExitButton;
         [SerializeField] private UnityEngine.UI.Button shuffleButton;
+        [Space(2)]
+        [Tooltip("Adet yazilari (xN). Kendi TMP'ni butona koy, KONUM/STIL sende; buraya surukle. Bos birakirsan adet yazisi gosterilmez (buton yine adet 0'da kilitlenir). Kod konuma DOKUNMAZ.")]
+        [SerializeField] private TMPro.TMP_Text destroyFillerCountText;
+        [SerializeField] private TMPro.TMP_Text extraExitCountText;
+        [SerializeField] private TMPro.TMP_Text shuffleCountText;
         [Space(4)]
         [Tooltip("Booster ADEDI (envanter). Kullandikca duser, bitince buton kilitlenir. Paketlerle (para ile) doldurulur -> AddBoosterCount().")]
         [SerializeField] private int boosterMaxCount = 3;                     // ust sinir (paket ile bile asilamaz)
@@ -2172,40 +2177,17 @@ namespace ColorCargoLoop
             return 0;
         }
 
-        // Butonlarin adet rozetini + kilit (interactable) durumunu gunceller
+        // Butonlarin KILIT (interactable) durumunu + ATANMIS adet yazisini gunceller.
+        // Adet yazilarinin KONUMU/STILI tamamen Inspector'dan (Berkant); kod sadece "xN" yazar.
         void RefreshBoosterButtons()
         {
-            UpdateBoosterButton(destroyFillerButton, destroyFillerCount);
-            UpdateBoosterButton(extraExitButton, extraExitCount);
-            UpdateBoosterButton(shuffleButton, shuffleCount);
-        }
+            if (destroyFillerButton != null) destroyFillerButton.interactable = destroyFillerCount > 0;
+            if (extraExitButton != null)     extraExitButton.interactable     = extraExitCount > 0;
+            if (shuffleButton != null)       shuffleButton.interactable       = shuffleCount > 0;
 
-        void UpdateBoosterButton(UnityEngine.UI.Button btn, int count)
-        {
-            if (btn == null) return;
-            btn.interactable = count > 0;                  // adet 0 -> buton kilitli (gri)
-            Transform badge = btn.transform.Find("CountBadge");
-            TMPro.TextMeshProUGUI tm;
-            if (badge == null)
-            {
-                // Rozet yoksa runtime olustur (senin verdigin gorseli BOZMADAN ust-koseye ekler).
-                // Kendi rozet tasarimini istersen butona "CountBadge" adli TMP child koy -> kod onu kullanir.
-                GameObject bd = new GameObject("CountBadge", typeof(RectTransform));
-                bd.transform.SetParent(btn.transform, false);
-                tm = bd.AddComponent<TMPro.TextMeshProUGUI>();
-                tm.alignment = TMPro.TextAlignmentOptions.BottomRight;
-                tm.fontSize = 58f;                                // buyuk -> kucuk butonda da okunur
-                tm.fontStyle = TMPro.FontStyles.Bold;
-                tm.color = new Color(1f, 0.93f, 0.30f);          // sari -> her zemine kontrast
-                tm.outlineWidth = 0.32f;                          // kalin koyu kontur
-                tm.outlineColor = new Color32(30, 20, 45, 255);
-                tm.raycastTarget = false;
-                RectTransform brt = bd.GetComponent<RectTransform>();
-                brt.anchorMin = Vector2.zero; brt.anchorMax = Vector2.one;
-                brt.offsetMin = new Vector2(0f, 2f); brt.offsetMax = new Vector2(-6f, 0f);
-            }
-            else tm = badge.GetComponent<TMPro.TextMeshProUGUI>();
-            if (tm != null) tm.text = "x" + count;         // "x3" ... "x0"
+            if (destroyFillerCountText != null) destroyFillerCountText.text = "x" + destroyFillerCount;
+            if (extraExitCountText != null)     extraExitCountText.text     = "x" + extraExitCount;
+            if (shuffleCountText != null)       shuffleCountText.text       = "x" + shuffleCount;
         }
 
         // --- 1) DOLGU SEPETI YOK ET: resmin ihtiyaci olmayan bir sepeti kaldirir -> alan acilir ---
@@ -2533,22 +2515,6 @@ namespace ColorCargoLoop
             trt.anchorMax = Vector2.one;
             trt.offsetMin = Vector2.zero;
             trt.offsetMax = Vector2.zero;
-
-            // Adet rozeti (sag-ust kose) -> RefreshBoosterButtons "x3" yazar
-            GameObject bd = new GameObject("CountBadge", typeof(RectTransform));
-            bd.transform.SetParent(go.transform, false);
-            TMPro.TextMeshProUGUI bt = bd.AddComponent<TMPro.TextMeshProUGUI>();
-            bt.text = "x3";
-            bt.alignment = TMPro.TextAlignmentOptions.TopRight;
-            bt.fontSize = 24f;
-            bt.fontStyle = TMPro.FontStyles.Bold;
-            bt.color = new Color(0.85f, 0.22f, 0.25f);
-            bt.raycastTarget = false;
-            RectTransform brt = bd.GetComponent<RectTransform>();
-            brt.anchorMin = Vector2.zero;
-            brt.anchorMax = Vector2.one;
-            brt.offsetMin = new Vector2(0f, 0f);
-            brt.offsetMax = new Vector2(-8f, -4f);
             return btn;
         }
 
