@@ -591,6 +591,7 @@ namespace ColorCargoLoop
 
         [Header("Gorsel Ayarlar (kolay erisim)")]
         [SerializeField, Range(0.4f, 1.5f)] private float basketHeightScale = 0.80f; // sepet duvar BOYU carpani (1 = eski boy; 0.8 = %20 kisa)
+        [SerializeField, Range(0.70f, 1.0f)] private float basketFootprint = 0.90f;  // sepet TABAN genisligi (1 = hucreyi tam doldur/dip dibe; <1 = kucult + bosluk)
         [SerializeField] private float portraitCubeSize = 0.14f; // potre kup boyutu; 0.14 = sepete dolan kup ile AYNI (0 yaparsan level degeri kullanilir)
 
         [Header("Booster Butonlari (gecici gorsel; ikon/animasyon sonra giydirilecek)")]
@@ -1134,10 +1135,8 @@ namespace ColorCargoLoop
                     Transform spad = slotPoints[i].Find("Pad"); if (spad != null) spad.gameObject.SetActive(false);
                     Transform srim = slotPoints[i].Find("Rim"); if (srim != null) srim.gameObject.SetActive(false);
                     Vector3 sp = slotPoints[i].position; sp.y = TruckGroundY;
-                    // Renkli cerceve (potre cercevesiyle ayni sicak ton)
-                    RoundedPad("SlotFrame_" + i, slotVis.transform, new Vector3(sp.x, 0.045f, sp.z), gridStepX * 1.10f + 0.16f, gridStepZ * 1.10f + 0.16f, new Color(0.99f, 0.90f, 0.70f), 0.09f, 0.26f);
-                    RoundedPad("SlotBase_" + i, slotVis.transform, new Vector3(sp.x, 0.05f, sp.z), gridStepX * 1.10f, gridStepZ * 1.10f, areaColor, 0.12f, 0.22f);
-                    Pad("SlotCell_" + i, slotVis.transform, new Vector3(sp.x, 0.095f, sp.z), gridStepX * 0.86f, gridStepZ * 0.86f, areaDarkColor, 0.05f);
+                    // Cerceve YOK: sadece zemine gomulu yumusak koseli koyu kare (Berkant istegi)
+                    Pad("SlotCell_" + i, slotVis.transform, new Vector3(sp.x, 0.045f, sp.z), gridStepX * 0.86f, gridStepZ * 0.86f, areaDarkColor, 0.05f);
                     slotList.Add(new SlotInfo { pos = sp, occupant = null });
                 }
                 return;
@@ -1562,9 +1561,9 @@ namespace ColorCargoLoop
             if (m.HasProperty("_HighlightColor")) m.SetColor("_HighlightColor", new Color(1f, 0.99f, 0.92f));
             if (m.HasProperty("_HighlightStrength")) m.SetFloat("_HighlightStrength", 0.78f);
 
-            // HUCREYI TAM DOLDUR -> komsu sepetlerle DIP DIBE (bosluk yok)
-            float Ex = gridStepX * 0.49f;
-            float Ez = gridStepZ * 0.49f;
+            // Sepet taban yari-genisligi (basketFootprint: 1 = hucreyi tam doldur, <1 = kucult)
+            float Ex = gridStepX * 0.49f * basketFootprint;
+            float Ez = gridStepZ * 0.49f * basketFootprint;
             float cm = Mathf.Min(gridStepX, gridStepZ);
             float h = cm * 0.46f * basketHeightScale, t = cm * 0.065f, fh = cm * 0.09f; // ince duvar (Beads Out referansi); boy Inspector'dan
             float r = Mathf.Min(Ex, Ez) * 0.14f; // kucuk kose yaricapi -> ince duvarla orantili (Beads Out referansi)
