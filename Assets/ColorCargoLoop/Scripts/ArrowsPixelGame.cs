@@ -678,8 +678,7 @@ namespace ColorCargoLoop
         [Header("Toon Gorunum (cartoon outline + golge; canli)")]
         [SerializeField] private Color toonOutlineColor = new Color(0.11f, 0.08f, 0.17f, 1f); // cizgi rengi (koyu)
         [SerializeField, Range(0f, 0.08f)] private float cubeOutline   = 0.052f; // potre kupleri (kalin cartoon cizgi)
-        [SerializeField, Range(0f, 0.08f)] private float basketOutline = 0.036f; // sepetler
-        [SerializeField, Range(0f, 0.08f)] private float envOutline    = 0.015f; // tepsi/soket/duvar (hafif cizgi)
+        [SerializeField, Range(0f, 0.08f)] private float basketOutline = 0.036f; // sepetler (ortam panellerinde outline yok -> kalin cizgi artifakti onlenir)
         [SerializeField, Range(0f, 1f)] private float toonShade = 0.66f;         // golge bandi sertligi (kontrast)
         [SerializeField, Range(0f, 1f)] private float toonRamp  = 0.50f;         // lit/golge esigi
         [SerializeField, Range(0f, 1f)] private float colorVividness = 0.24f;    // renk canliligi (doygunluk artisi -> cartoon)
@@ -923,9 +922,9 @@ namespace ColorCargoLoop
             m = new Material(sh) { name = "APX_" + key };
             if (m.HasProperty("_Color")) m.SetColor("_Color", c);
             if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", Color.white);
-            // Toon: ortam objelerine hafif cartoon cizgi + golge bandi (Inspector'dan ayarlanir)
-            if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", envOutline);
-            if (m.HasProperty("_OutlineColor")) m.SetColor("_OutlineColor", toonOutlineColor);
+            // Ortam objelerinde OUTLINE YOK: buyuk tepsi/panellerde outline obje-uzayinda
+            // sisip kalin siyah cizgi artifaktina donusuyordu. Sadece toon golge bandi kalir.
+            if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", 0f);
             if (m.HasProperty("_ShadeStrength")) m.SetFloat("_ShadeStrength", toonShade);
             if (m.HasProperty("_RampThreshold")) m.SetFloat("_RampThreshold", toonRamp);
             m.color = c;
