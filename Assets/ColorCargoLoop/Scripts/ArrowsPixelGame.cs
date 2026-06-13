@@ -603,6 +603,12 @@ namespace ColorCargoLoop
         [SerializeField] private UnityEngine.UI.Button destroyFillerButton; // bos = kod gecici buton kurar
         [SerializeField] private UnityEngine.UI.Button extraExitButton;
         [SerializeField] private UnityEngine.UI.Button shuffleButton;
+        [Space(4)]
+        [Tooltip("Booster ADEDI (envanter). Kullandikca duser, bitince buton kilitlenir. Paketlerle (para ile) doldurulur -> AddBoosterCount().")]
+        [SerializeField] private int boosterMaxCount = 3;                     // ust sinir (paket ile bile asilamaz)
+        [SerializeField, Range(0, 3)] private int destroyFillerCount = 3;     // baslangic adedi
+        [SerializeField, Range(0, 3)] private int extraExitCount = 3;
+        [SerializeField, Range(0, 3)] private int shuffleCount = 3;
 
         [Header("UI (Canvas'ta sen kur, sonra bagla)")]
         [SerializeField] private TMPro.TMP_Text moveText;  // kalan hamle
@@ -2134,13 +2140,82 @@ namespace ColorCargoLoop
             return cubesByColor.TryGetValue(c, out l) && l != null ? l.Count : 0;
         }
 
+        // ----- BOOSTER ENVANTERI (adet) -----
+        // Adet 0'sa booster kullanilamaz (buton kilitli). Eylem GERCEKTEN yapilacaksa cagrilir -> 1 duser.
+        bool ConsumeBooster(ref int count, string label)
+        {
+            if (count <= 0)
+            {
+                Debug.Log("[Booster] " + label + " bitti (adet 0) - paket al");
+                return false;
+            }
+            count--;
+            RefreshBoosterButtons();
+            return true;
+        }
+
+        // Paket sistemi (IAP/para) buradan adet ekler: which 0=YokEt 1=Kapi 2=Karistir
+        public void AddBoosterCount(int which, int amount)
+        {
+            switch (which)
+            {
+                case 0: destroyFillerCount = Mathf.Clamp(destroyFillerCount + amount, 0, boosterMaxCount); break;
+                case 1: extraExitCount     = Mathf.Clamp(extraExitCount + amount, 0, boosterMaxCount); break;
+                case 2: shuffleCount       = Mathf.Clamp(shuffleCount + amount, 0, boosterMaxCount); break;
+            }
+            RefreshBoosterButtons();
+        }
+
+        public int GetBoosterCount(int which)
+        {
+            switch (which) { case 0: return destroyFillerCount; case 1: return extraExitCount; case 2: return shuffleCount; }
+            return 0;
+        }
+
+        // Butonlarin adet rozetini + kilit (interactable) durumunu gunceller
+        void RefreshBoosterButtons()
+        {
+            UpdateBoosterButton(destroyFillerButton, destroyFillerCount);
+            UpdateBoosterButton(extraExitButton, extraExitCount);
+            UpdateBoosterButton(shuffleButton, shuffleCount);
+        }
+
+        void UpdateBoosterButton(UnityEngine.UI.Button btn, int count)
+        {
+            if (btn == null) return;
+            btn.interactable = count > 0;                  // adet 0 -> buton kilitli (gri)
+            Transform badge = btn.transform.Find("CountBadge");
+            TMPro.TextMeshProUGUI tm;
+            if (badge == null)
+            {
+                // Rozet yoksa runtime olustur (senin verdigin gorseli BOZMADAN ust-koseye ekler).
+                // Kendi rozet tasarimini istersen butona "CountBadge" adli TMP child koy -> kod onu kullanir.
+                GameObject bd = new GameObject("CountBadge", typeof(RectTransform));
+                bd.transform.SetParent(btn.transform, false);
+                tm = bd.AddComponent<TMPro.TextMeshProUGUI>();
+                tm.alignment = TMPro.TextAlignmentOptions.BottomRight;
+                tm.fontSize = 58f;                                // buyuk -> kucuk butonda da okunur
+                tm.fontStyle = TMPro.FontStyles.Bold;
+                tm.color = new Color(1f, 0.93f, 0.30f);          // sari -> her zemine kontrast
+                tm.outlineWidth = 0.32f;                          // kalin koyu kontur
+                tm.outlineColor = new Color32(30, 20, 45, 255);
+                tm.raycastTarget = false;
+                RectTransform brt = bd.GetComponent<RectTransform>();
+                brt.anchorMin = Vector2.zero; brt.anchorMax = Vector2.one;
+                brt.offsetMin = new Vector2(0f, 2f); brt.offsetMax = new Vector2(-6f, 0f);
+            }
+            else tm = badge.GetComponent<TMPro.TextMeshProUGUI>();
+            if (tm != null) tm.text = "x" + count;         // "x3" ... "x0"
+        }
+
         // --- 1) DOLGU SEPETI YOK ET: resmin ihtiyaci olmayan bir sepeti kaldirir -> alan acilir ---
         public void BoosterDestroyFiller()
         {
             if (gstate != GameState.Playing || inputLocked) return;
+            if (destroyFillerCount <= 0) { Debug.Log("[Booster] YOK ET bitti (adet 0) - paket al"); return; }
             TruckInfo victim = FindFillerTruck();
             if (victim == null) { Debug.Log("[Booster] Yok edilecek dolgu sepeti yok"); return; }
-            if (!TrySpendCoins(destroyFillerCost)) return;
+            if (!ConsumeBooster(ref destroyFillerCount, "YOK ET")) return;
             victim.extracted = true; // hucresi aninda bosalir, tiklanamaz olur
             StartCoroutine(DestroyTruckRoutine(victim));
         }
@@ -2191,9 +2266,10 @@ namespace ColorCargoLoop
         public void BoosterExtraExit()
         {
             if (gstate != GameState.Playing || inputLocked) return;
+            if (extraExitCount <= 0) { Debug.Log("[Booster] +KAPI bitti (adet 0) - paket al"); return; }
             int bgx, bgz, bdx, bdz;
             if (!FindNewExitEdge(out bgx, out bgz, out bdx, out bdz)) { Debug.Log("[Booster] Yeni kapi icin uygun kenar yok"); return; }
-            if (!TrySpendCoins(extraExitCost)) return;
+            if (!ConsumeBooster(ref extraExitCount, "+KAPI")) return;
 
             var list = new List<ArrowsPixelExitGate>(activeExits ?? new ArrowsPixelExitGate[0]);
             list.Add(new ArrowsPixelExitGate { x = bgx, z = bgz, direction = VectorToExitDirection(bdx, bdz) });
@@ -2310,9 +2386,10 @@ namespace ColorCargoLoop
         {
             if (gstate != GameState.Playing || inputLocked) return;
             List<TruckInfo> act = new List<TruckInfo>();
+            if (shuffleCount <= 0) { Debug.Log("[Booster] KARISTIR bitti (adet 0) - paket al"); return; }
             foreach (var t in trucks) if (t != null && !t.extracted && !t.moving && t.root != null) act.Add(t);
             if (act.Count < 2) { Debug.Log("[Booster] Karistirilacak yeterli sepet yok"); return; }
-            if (!TrySpendCoins(shuffleCost)) return;
+            if (!ConsumeBooster(ref shuffleCount, "KARISTIR")) return;
 
             var cells = new List<Vector2Int>();
             foreach (var t in act) cells.Add(new Vector2Int(t.gx, t.gz));
@@ -2398,6 +2475,7 @@ namespace ColorCargoLoop
                 if (shuffleButton != null) shuffleButton.onClick.AddListener(BoosterShuffle);
                 boosterWired = true;
             }
+            RefreshBoosterButtons(); // adet rozetleri + kilit durumu (her level basinda da tazele)
             return true;
         }
 
@@ -2420,12 +2498,14 @@ namespace ColorCargoLoop
             rt.anchoredPosition = new Vector2(0f, 26f);
             rt.sizeDelta = new Vector2(580f, 104f);
 
-            CreateBoosterButton(bar.transform, 0, "YOK ET", destroyFillerCost, BoosterDestroyFiller);
-            CreateBoosterButton(bar.transform, 1, "+KAPI", extraExitCost, BoosterExtraExit);
-            CreateBoosterButton(bar.transform, 2, "KARISTIR", shuffleCost, BoosterShuffle);
+            destroyFillerButton = CreateBoosterButton(bar.transform, 0, "YOK ET", BoosterDestroyFiller);
+            extraExitButton     = CreateBoosterButton(bar.transform, 1, "+KAPI", BoosterExtraExit);
+            shuffleButton       = CreateBoosterButton(bar.transform, 2, "KARISTIR", BoosterShuffle);
+            boosterWired = true;        // bu butonlari kod kurdu -> onClick zaten bagli (TryWire tekrar baglamasin)
+            RefreshBoosterButtons();    // adet rozetleri + kilit durumu
         }
 
-        void CreateBoosterButton(Transform parent, int index, string label, int cost, UnityEngine.Events.UnityAction onClick)
+        UnityEngine.UI.Button CreateBoosterButton(Transform parent, int index, string label, UnityEngine.Events.UnityAction onClick)
         {
             GameObject go = new GameObject("Booster_" + label, typeof(RectTransform), typeof(UnityEngine.UI.Image), typeof(UnityEngine.UI.Button));
             go.transform.SetParent(parent, false);
@@ -2443,7 +2523,7 @@ namespace ColorCargoLoop
             GameObject txt = new GameObject("Label", typeof(RectTransform));
             txt.transform.SetParent(go.transform, false);
             TMPro.TextMeshProUGUI tm = txt.AddComponent<TMPro.TextMeshProUGUI>();
-            tm.text = label + "\n<size=64%>" + cost + " coin</size>";
+            tm.text = label;
             tm.alignment = TMPro.TextAlignmentOptions.Center;
             tm.fontSize = 30f;
             tm.color = new Color(0.45f, 0.30f, 0.15f);
@@ -2453,6 +2533,23 @@ namespace ColorCargoLoop
             trt.anchorMax = Vector2.one;
             trt.offsetMin = Vector2.zero;
             trt.offsetMax = Vector2.zero;
+
+            // Adet rozeti (sag-ust kose) -> RefreshBoosterButtons "x3" yazar
+            GameObject bd = new GameObject("CountBadge", typeof(RectTransform));
+            bd.transform.SetParent(go.transform, false);
+            TMPro.TextMeshProUGUI bt = bd.AddComponent<TMPro.TextMeshProUGUI>();
+            bt.text = "x3";
+            bt.alignment = TMPro.TextAlignmentOptions.TopRight;
+            bt.fontSize = 24f;
+            bt.fontStyle = TMPro.FontStyles.Bold;
+            bt.color = new Color(0.85f, 0.22f, 0.25f);
+            bt.raycastTarget = false;
+            RectTransform brt = bd.GetComponent<RectTransform>();
+            brt.anchorMin = Vector2.zero;
+            brt.anchorMax = Vector2.one;
+            brt.offsetMin = new Vector2(0f, 0f);
+            brt.offsetMax = new Vector2(-8f, -4f);
+            return btn;
         }
 
         // UI: yazilar artik Canvas'tan (TextMeshPro). OnGUI kaldirildi; referanslar atanmazsa sessizce gecer.

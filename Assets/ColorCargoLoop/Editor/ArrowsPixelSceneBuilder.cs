@@ -184,6 +184,23 @@ namespace ColorCargoLoopEditor
             lrt.offsetMin = Vector2.zero;
             lrt.offsetMax = Vector2.zero;
 
+            // Adet rozeti (sag-ust) -> kod "x3"...".x0" yazar; adet 0 olunca buton kilitlenir.
+            // Bunu da kendi gorseline gore tasarlayabilirsin; ismi "CountBadge" kalsin yeter.
+            GameObject badge = new GameObject("CountBadge", typeof(RectTransform));
+            badge.transform.SetParent(go.transform, false);
+            TMPro.TextMeshProUGUI bt = badge.AddComponent<TMPro.TextMeshProUGUI>();
+            bt.text = "x3";
+            bt.alignment = TMPro.TextAlignmentOptions.TopRight;
+            bt.fontSize = 34f;
+            bt.fontStyle = TMPro.FontStyles.Bold;
+            bt.color = new Color(0.85f, 0.22f, 0.25f);
+            bt.raycastTarget = false;
+            RectTransform brt = badge.GetComponent<RectTransform>();
+            brt.anchorMin = Vector2.zero;
+            brt.anchorMax = Vector2.one;
+            brt.offsetMin = Vector2.zero;
+            brt.offsetMax = new Vector2(-12f, -6f);
+
             return go.GetComponent<Button>();
         }
 
