@@ -2207,8 +2207,69 @@ namespace ColorCargoLoop
                 const float wt = 0.17f; // BuildModularWalls ile ayni duvar kalinligi
                 Vector3 center = CellToWorld(bgx, bgz) + dir * ((bdx != 0 ? gridStepX : gridStepZ) * 0.5f + wt * 0.5f);
                 center.y = 0.16f;
+
+                // Kapi parcalarini olustur, sonra hepsini bir konteynere toplayip "minik->buyu + zipla + sallan" animasyonu oynat
+                int before = parkTransform.childCount;
                 BuildGateMarker(parkTransform, center, dir, wt);
+                GameObject cont = new GameObject("GateSpawn");
+                cont.transform.SetParent(parkTransform, false);
+                Vector3 pivot = center; pivot.y = 0f;          // taban pivotu -> yerden buyur gibi
+                cont.transform.localPosition = pivot;
+                for (int i = parkTransform.childCount - 1; i >= before; i--)
+                {
+                    Transform child = parkTransform.GetChild(i);
+                    if (child == cont.transform) continue;
+                    child.SetParent(cont.transform, true);      // dunya pozisyonu korunur
+                }
+                StartCoroutine(GateSpawnAnim(cont.transform, dir));
             }
+        }
+
+        // +KAPI dogus animasyonu: minik->tam boy (overshoot), kucuk zipla, sonra demir-para gibi sonumlu sallan
+        System.Collections.IEnumerator GateSpawnAnim(Transform t, Vector3 dir)
+        {
+            if (t == null) yield break;
+            Quaternion baseRot = t.localRotation;
+            Vector3 basePos = t.localPosition;
+            Vector3 axis = Vector3.Cross(Vector3.up, dir.sqrMagnitude > 0.001f ? dir.normalized : Vector3.forward);
+            if (axis.sqrMagnitude < 0.001f) axis = Vector3.right;
+            axis.Normalize();
+
+            // Faz 1: minikten buyu (overshoot) + zipla
+            float d1 = 0.28f, e = 0f, hop = 0.30f;
+            while (e < d1 && t != null)
+            {
+                e += Time.deltaTime;
+                float u = Mathf.Clamp01(e / d1);
+                t.localScale = Vector3.one * EaseOutBack(u);
+                t.localPosition = basePos + Vector3.up * (Mathf.Sin(u * Mathf.PI) * hop);
+                yield return null;
+            }
+            if (t == null) yield break;
+            t.localScale = Vector3.one;
+            t.localPosition = basePos;
+
+            // Faz 2: sonumlu sallanim (yere konan demir para hissi)
+            float d2 = 0.45f; e = 0f;
+            const float amp = 11f, freq = 24f;
+            while (e < d2 && t != null)
+            {
+                e += Time.deltaTime;
+                float k = 1f - Mathf.Clamp01(e / d2);      // sonum (0'a iner)
+                float ang = Mathf.Sin(e * freq) * amp * k * k;
+                t.localRotation = baseRot * Quaternion.AngleAxis(ang, axis);
+                yield return null;
+            }
+            if (t != null) t.localRotation = baseRot;
+        }
+
+        // EaseOutBack: 1'i hafifce gecip geri oturan yumusak overshoot egrisi
+        static float EaseOutBack(float x)
+        {
+            const float c1 = 1.70158f;
+            const float c3 = c1 + 1f;
+            float xm = x - 1f;
+            return 1f + c3 * xm * xm * xm + c1 * xm * xm;
         }
 
         bool FindNewExitEdge(out int bgx, out int bgz, out int bdx, out int bdz)
