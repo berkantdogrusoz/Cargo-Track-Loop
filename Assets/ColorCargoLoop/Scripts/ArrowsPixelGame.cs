@@ -593,6 +593,9 @@ namespace ColorCargoLoop
         [SerializeField, Range(0.4f, 1.5f)] private float basketHeightScale = 0.80f; // sepet duvar BOYU carpani (1 = eski boy; 0.8 = %20 kisa)
         [SerializeField, Range(0.70f, 1.0f)] private float basketFootprint = 0.90f;  // sepet TABAN genisligi (1 = hucreyi tam doldur/dip dibe; <1 = kucult + bosluk)
         [SerializeField, Range(0.10f, 0.9f)] private float dragLiftHeight = 0.42f;   // sepeti TUTUNCA zeminden kaldirma (eski ~0.27; buyuk = daha cok pop)
+        [SerializeField] private float slotZOffset = -0.55f;                          // 3 slotu portre cercevesinden UZAKLASTIR (negatif = oyuncuya dogru)
+        [SerializeField] private bool basketSpinOnDrag = true;                        // drag'de sepet kendi etrafinda doner
+        [SerializeField, Range(0f, 2f)] private float basketSpinTurns = 1f;           // kac tam tur (1 = tam tur, ayni aciya oturur)
         [SerializeField] private float portraitCubeSize = 0.14f; // potre kup boyutu; 0.14 = sepete dolan kup ile AYNI (0 yaparsan level degeri kullanilir)
 
         [Header("Booster Butonlari (gecici gorsel; ikon/animasyon sonra giydirilecek)")]
@@ -1136,6 +1139,7 @@ namespace ColorCargoLoop
                     Transform spad = slotPoints[i].Find("Pad"); if (spad != null) spad.gameObject.SetActive(false);
                     Transform srim = slotPoints[i].Find("Rim"); if (srim != null) srim.gameObject.SetActive(false);
                     Vector3 sp = slotPoints[i].position; sp.y = TruckGroundY;
+                    sp.z += slotZOffset; // portre cercevesinden uzaklastir (Inspector'dan ayarlanir)
                     // Cerceve YOK: sadece zemine gomulu yumusak koseli koyu kare (Berkant istegi)
                     Pad("SlotCell_" + i, slotVis.transform, new Vector3(sp.x, 0.045f, sp.z), gridStepX * 0.86f, gridStepZ * 0.86f, areaDarkColor, 0.05f);
                     slotList.Add(new SlotInfo { pos = sp, occupant = null });
@@ -1880,10 +1884,17 @@ namespace ColorCargoLoop
             a.y = TruckGroundY;
             tr.position = a;
             target.y = TruckGroundY;
-            Quaternion rb = DirectionToTruckRotation(dir);
-            yield return MoveRot(tr, a, target, tr.rotation, rb, 0.22f, false);
+            if (basketSpinOnDrag && useBasketStyle)
+            {
+                yield return MoveSpin(tr, a, target, 0.22f, basketSpinTurns); // sepet kendi etrafinda doner
+            }
+            else
+            {
+                Quaternion rb = DirectionToTruckRotation(dir);
+                yield return MoveRot(tr, a, target, tr.rotation, rb, 0.22f, false);
+                tr.rotation = rb;
+            }
             tr.position = target;
-            tr.rotation = rb;
 
             ArrowsPixelExitGate exitGate = FindExitAtCell(t.gx, t.gz);
             if (exitGate != null)
@@ -1960,6 +1971,28 @@ namespace ColorCargoLoop
                 yield return null;
             }
             tr.position = b; tr.rotation = rb;
+        }
+
+        // Sepeti hedefe kaydirirken kendi Y ekseninde dondurur (turns tam tur). Simetrik sepet -> ayni aciya oturur.
+        System.Collections.IEnumerator MoveSpin(Transform tr, Vector3 a, Vector3 b, float dur, float turns)
+        {
+            float groundY = a.y;
+            b.y = groundY;
+            Quaternion startRot = tr.rotation;
+            float totalDeg = turns * 360f;
+            float e = 0f;
+            while (e < dur)
+            {
+                e += Time.deltaTime;
+                float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(e / dur));
+                Vector3 p = Vector3.Lerp(a, b, u);
+                p.y = groundY;
+                tr.position = p;
+                tr.rotation = startRot * Quaternion.Euler(0f, totalDeg * u, 0f);
+                yield return null;
+            }
+            tr.position = b;
+            tr.rotation = startRot * Quaternion.Euler(0f, totalDeg, 0f);
         }
 
         System.Collections.IEnumerator MoveArc(Transform tr, Vector3 a, Vector3 b, float dur, bool arc)
@@ -2143,16 +2176,37 @@ namespace ColorCargoLoop
             if (PictureEmpty())
             {
                 gstate = GameState.Won;
-                StartCoroutine(LoadNextLevelAfterDelay());
+                inputLocked = true;
+                ShowEndPanel(winPanel, true);
                 return;
             }
-            if (moveCount >= moveLimit) gstate = GameState.Lost;
+            if (moveCount >= moveLimit)
+            {
+                gstate = GameState.Lost;
+                inputLocked = true;
+                ShowEndPanel(losePanel, false);
+            }
+        }
+
+        // Panel atanmissa goster (Berkant tasarlar; butonlari LoadNextLevel/RestartLevel'e baglar).
+        // Atanmamissa eski davranis: win -> sonraki level, lose -> restart (geriye donuk uyum).
+        void ShowEndPanel(GameObject panel, bool win)
+        {
+            if (panel != null) { panel.SetActive(true); return; }
+            if (win) StartCoroutine(LoadNextLevelAfterDelay());
+            else StartCoroutine(RestartAfterDelay());
         }
 
         System.Collections.IEnumerator LoadNextLevelAfterDelay()
         {
             yield return new WaitForSeconds(0.55f);
             LoadNextLevel();
+        }
+
+        System.Collections.IEnumerator RestartAfterDelay()
+        {
+            yield return new WaitForSeconds(0.85f);
+            RestartLevel();
         }
 
         // ===================== FAZ C: BOOSTER'LAR =====================
