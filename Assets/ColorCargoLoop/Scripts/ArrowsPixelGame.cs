@@ -595,7 +595,7 @@ namespace ColorCargoLoop
         [SerializeField, Range(0.10f, 0.9f)] private float dragLiftHeight = 0.42f;   // sepeti TUTUNCA zeminden kaldirma (eski ~0.27; buyuk = daha cok pop)
         [SerializeField] private float slotZOffset = -0.55f;                          // 3 slotu portre cercevesinden UZAKLASTIR (negatif = oyuncuya dogru)
         [SerializeField] private bool basketSpinOnDrag = true;                        // drag'de sepet kendi etrafinda doner
-        [SerializeField, Range(0f, 2f)] private float basketSpinTurns = 1f;           // kac tam tur (1 = tam tur, ayni aciya oturur)
+        [SerializeField, Range(0f, 2f)] private float basketSpinTurns = 0.5f;         // kac tur (0.5 = yarim tur/180, daha sakin; simetrik sepet ayni gorunur)
         [SerializeField] private float portraitCubeSize = 0.14f; // potre kup boyutu; 0.14 = sepete dolan kup ile AYNI (0 yaparsan level degeri kullanilir)
 
         [Header("Booster Butonlari (gecici gorsel; ikon/animasyon sonra giydirilecek)")]
