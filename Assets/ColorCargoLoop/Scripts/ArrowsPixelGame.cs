@@ -2052,7 +2052,7 @@ namespace ColorCargoLoop
                 t.filled++;
                 yield return new WaitForSeconds(0.008f); // yogun akis (eski sirali: 0.035)
             }
-            yield return new WaitForSeconds(0.45f);   // son kupler insin
+            yield return new WaitForSeconds(0.40f);   // son kupler insin (kup ucusu ~0.38)
             yield return DepartTruck(t, slot);
         }
 
@@ -2126,7 +2126,7 @@ namespace ColorCargoLoop
             Vector3 popPos = p0 + Vector3.up * 0.18f;
             Vector3 endPos = p0 + Vector3.up * 1.05f;
 
-            float popDur = 0.14f, e = 0f;
+            float popDur = 0.07f, e = 0f;   // %50 hizli dogus (eski 0.14)
             while (e < popDur && tr != null)
             {
                 e += Time.deltaTime;
@@ -2138,7 +2138,7 @@ namespace ColorCargoLoop
 
             Vector3 liftStart = tr != null ? tr.position : popPos;
             Vector3 scaleStart = tr != null ? tr.localScale : s0;
-            float dur = 0.38f;
+            float dur = 0.19f;              // %50 hizli havalanma/kaybolma (eski 0.38)
             e = 0f;
             while (e < dur && tr != null)
             {
