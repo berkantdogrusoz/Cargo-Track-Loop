@@ -7730,7 +7730,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &1321288081
 Transform:
   m_ObjectHideFlags: 0
@@ -8032,10 +8032,6 @@ MonoBehaviour:
   useGeneratedLevels: 1
   levels: []
   moveLimit: 8
-  backgroundColor: {r: 0.54901963, g: 0.5882353, b: 0.72156864, a: 1}
-  areaColor: {r: 0.55, g: 0.59, b: 0.72, a: 1}
-  areaDarkColor: {r: 0.45, g: 0.49, b: 0.62, a: 1}
-  wallColor: {r: 0.93, g: 0.94, b: 1, a: 1}
 --- !u!4 &1335510967
 Transform:
   m_ObjectHideFlags: 0

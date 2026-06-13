@@ -667,10 +667,13 @@ namespace ColorCargoLoop
         static readonly Color C_PURPLE = new Color(0.77f, 0.63f, 1.00f);
         static readonly Color C_ORANGE = new Color(1.00f, 0.62f, 0.30f);
         static readonly Color C_CREAM  = new Color(0.99f, 0.92f, 0.80f);
-        static readonly Color C_FLOOR  = new Color(0.66f, 0.84f, 0.97f); // arka plan: acik mavi (eski pembe: 0.95,0.71,0.74)
         static readonly Color C_PAD    = new Color(0.99f, 0.86f, 0.74f);
-        static readonly Color C_AREA      = new Color(0.55f, 0.59f, 0.72f); // birlesik alan rengi (board/slot/potre bg)
-        static readonly Color C_AREA_DARK = new Color(0.45f, 0.49f, 0.62f); // grid hucre recess (koyu, acik renk yok)
+
+        [Header("Palet / Cevre Renkleri (Inspector'dan ayarla; Play'de uygulanir)")]
+        [SerializeField] private Color backgroundColor = new Color(0.55f, 0.59f, 0.72f); // arka plan (kamera + zemin plani)
+        [SerializeField] private Color areaColor       = new Color(0.55f, 0.59f, 0.72f); // tepsi: board / slot / potre
+        [SerializeField] private Color areaDarkColor   = new Color(0.45f, 0.49f, 0.62f); // grid soket (koyu girinti)
+        [SerializeField] private Color wallColor       = new Color(0.93f, 0.94f, 1.00f); // moduler duvar + kapi postu
 
         Transform root;
         ColorCargoLoopGame oldGame;   // birebir uçan kup mesh/material kaynagi
@@ -912,11 +915,12 @@ namespace ColorCargoLoop
                 if (rend == null || rend.sharedMaterial == null) continue;
                 Material m = new Material(rend.sharedMaterial);
                 if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", 0f);
-                // krem alanlari (slot + potre bg) birlesik area rengine cevir (acik renk istenmiyor)
+                // Arka plan paneli -> backgroundColor; diger krem alanlar (slot+potre bg) -> areaColor
+                bool isBackground = rend.gameObject.name == "Background";
                 Color cc = m.HasProperty("_Color") ? m.GetColor("_Color") : Color.clear;
-                if (Mathf.Abs(cc.r - 0.99f) + Mathf.Abs(cc.g - 0.86f) + Mathf.Abs(cc.b - 0.74f) < 0.22f)
+                if (isBackground || Mathf.Abs(cc.r - 0.99f) + Mathf.Abs(cc.g - 0.86f) + Mathf.Abs(cc.b - 0.74f) < 0.22f)
                 {
-                    if (m.HasProperty("_Color")) m.SetColor("_Color", C_AREA);
+                    if (m.HasProperty("_Color")) m.SetColor("_Color", isBackground ? backgroundColor : areaColor);
                     if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", Color.white);
                 }
                 rend.sharedMaterial = m;
@@ -1004,7 +1008,7 @@ namespace ColorCargoLoop
         // ---------- Arka plan ----------
         void BuildBackground()
         {
-            Box("BG", root, new Vector3(0f, -0.2f, 0.5f), new Vector3(14f, 0.2f, 22f), C_FLOOR);
+            Box("BG", root, new Vector3(0f, -0.2f, 0.5f), new Vector3(14f, 0.2f, 22f), backgroundColor);
         }
 
         // ---------- UST: pixel-art resim ----------
@@ -1057,8 +1061,8 @@ namespace ColorCargoLoop
                 // Renkli MODULER cerceve: resim boyutu degisince cerceve de otomatik uyar
                 Color frameC = new Color(0.99f, 0.90f, 0.70f); // sicak krem-altin (UI plaketleriyle ayni aile)
                 RoundedPad("PictureFrame", pgnd.transform, new Vector3(pcx, -0.115f, pcz), pw + 0.48f, ph + 0.48f, frameC, 0.07f, 0.36f);
-                RoundedPad("PictureBase", pgnd.transform, new Vector3(pcx, -0.10f, pcz), pw + 0.30f, ph + 0.30f, C_AREA, 0.08f, 0.32f);
-                RoundedPad("PictureCell", pgnd.transform, new Vector3(pcx, -0.075f, pcz), pw, ph, C_AREA_DARK, 0.05f, 0.26f);
+                RoundedPad("PictureBase", pgnd.transform, new Vector3(pcx, -0.10f, pcz), pw + 0.30f, ph + 0.30f, areaColor, 0.08f, 0.32f);
+                RoundedPad("PictureCell", pgnd.transform, new Vector3(pcx, -0.075f, pcz), pw, ph, areaDarkColor, 0.05f, 0.26f);
             }
             else
             {
@@ -1106,8 +1110,8 @@ namespace ColorCargoLoop
                     Vector3 sp = slotPoints[i].position; sp.y = TruckGroundY;
                     // Renkli cerceve (potre cercevesiyle ayni sicak ton)
                     RoundedPad("SlotFrame_" + i, slotVis.transform, new Vector3(sp.x, 0.045f, sp.z), gridStepX * 1.10f + 0.16f, gridStepZ * 1.10f + 0.16f, new Color(0.99f, 0.90f, 0.70f), 0.09f, 0.26f);
-                    RoundedPad("SlotBase_" + i, slotVis.transform, new Vector3(sp.x, 0.05f, sp.z), gridStepX * 1.10f, gridStepZ * 1.10f, C_AREA, 0.12f, 0.22f);
-                    Pad("SlotCell_" + i, slotVis.transform, new Vector3(sp.x, 0.095f, sp.z), gridStepX * 0.86f, gridStepZ * 0.86f, C_AREA_DARK, 0.05f);
+                    RoundedPad("SlotBase_" + i, slotVis.transform, new Vector3(sp.x, 0.05f, sp.z), gridStepX * 1.10f, gridStepZ * 1.10f, areaColor, 0.12f, 0.22f);
+                    Pad("SlotCell_" + i, slotVis.transform, new Vector3(sp.x, 0.095f, sp.z), gridStepX * 0.86f, gridStepZ * 0.86f, areaDarkColor, 0.05f);
                     slotList.Add(new SlotInfo { pos = sp, occupant = null });
                 }
                 return;
@@ -1160,7 +1164,7 @@ namespace ColorCargoLoop
             {
                 float boardX = (gridWidth - 1) * gridStepX + gridStepX + 0.28f;
                 float boardZ = (gridHeight - 1) * gridStepZ + gridStepZ + 0.28f;
-                RoundedPad("BoardBase", park.transform, new Vector3(parkingOrigin.x, 0.05f, parkingOrigin.z), boardX, boardZ, C_AREA, 0.12f, 0.32f);
+                RoundedPad("BoardBase", park.transform, new Vector3(parkingOrigin.x, 0.05f, parkingOrigin.z), boardX, boardZ, areaColor, 0.12f, 0.32f);
             }
 
             // GRID: her (var olan) hucrede yuvarlak koseli koyu socket (cartoon recess)
@@ -1172,10 +1176,10 @@ namespace ColorCargoLoop
                     if (HasCellMask())
                     {
                         Vector3 bp = cp; bp.y = 0.05f;
-                        RoundedPad("BoardBase_" + sgx + "_" + sgz, park.transform, bp, gridStepX + 0.02f, gridStepZ + 0.02f, C_AREA, 0.12f, 0.10f);
+                        RoundedPad("BoardBase_" + sgx + "_" + sgz, park.transform, bp, gridStepX + 0.02f, gridStepZ + 0.02f, areaColor, 0.12f, 0.10f);
                     }
                     cp.y = 0.095f;
-                    Pad("Cell_" + sgx + "_" + sgz, park.transform, cp, gridStepX * 0.86f, gridStepZ * 0.86f, C_AREA_DARK, 0.05f);
+                    Pad("Cell_" + sgx + "_" + sgz, park.transform, cp, gridStepX * 0.86f, gridStepZ * 0.86f, areaDarkColor, 0.05f);
                 }
 
             // Modüler yumusak duvar: sinir kenarlarini hucre hucre takip eder (T/L grid formlarinda da calisir)
@@ -1266,7 +1270,7 @@ namespace ColorCargoLoop
         // (dikdortgen / T / L) duvar kenari otomatik takip eder. Cikis kenarina duvar yerine kapi gelir.
         void BuildModularWalls(Transform parent)
         {
-            Color wallC = new Color(0.93f, 0.94f, 1.00f); // acik, yumusak (pembe dandik duvarin yerine)
+            Color wallC = wallColor; // Inspector'dan ayarlanir (moduler duvar)
             float t = 0.17f, wh = 0.30f, wy = 0.16f;
             for (int gx = 0; gx < gridWidth; gx++)
                 for (int gz = 0; gz < gridHeight; gz++)
@@ -1324,7 +1328,7 @@ namespace ColorCargoLoop
         // Cikis kapisi: iki yan post + krem paspas + disari bakan sari chevron ok (yonu net gosterir)
         void BuildGateMarker(Transform parent, Vector3 center, Vector3 dir, float t)
         {
-            Color postC  = new Color(0.93f, 0.94f, 1.00f);
+            Color postC  = wallColor;
             Color matC   = new Color(0.99f, 0.93f, 0.78f);
             Color arrowC = new Color(1.00f, 0.78f, 0.25f);
             bool horiz = Mathf.Abs(dir.x) > 0.5f; // kapi sag/sol kenarda mi
@@ -1647,7 +1651,7 @@ namespace ColorCargoLoop
             Vector3 lookAt = new Vector3(0f, 0.3f, 0.15f);            // potre > slot > tir kompozisyon merkezi
             cam.transform.position = lookAt - fwd * 13f;
             cam.orthographicSize = cameraOrthographicSize;
-            cam.backgroundColor = C_FLOOR;
+            cam.backgroundColor = backgroundColor;
 
             // Isik TIRLARIN tarafindan (on-ust, yaw 0) -> kup onleri parlar, golge yukari/arkaya (blob yok)
             foreach (var l in FindObjectsOfType<Light>())
