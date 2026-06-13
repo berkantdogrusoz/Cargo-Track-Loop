@@ -592,6 +592,7 @@ namespace ColorCargoLoop
         [Header("Gorsel Ayarlar (kolay erisim)")]
         [SerializeField, Range(0.4f, 1.5f)] private float basketHeightScale = 0.80f; // sepet duvar BOYU carpani (1 = eski boy; 0.8 = %20 kisa)
         [SerializeField, Range(0.70f, 1.0f)] private float basketFootprint = 0.90f;  // sepet TABAN genisligi (1 = hucreyi tam doldur/dip dibe; <1 = kucult + bosluk)
+        [SerializeField, Range(0.10f, 0.9f)] private float dragLiftHeight = 0.42f;   // sepeti TUTUNCA zeminden kaldirma (eski ~0.27; buyuk = daha cok pop)
         [SerializeField] private float portraitCubeSize = 0.14f; // potre kup boyutu; 0.14 = sepete dolan kup ile AYNI (0 yaparsan level degeri kullanilir)
 
         [Header("Booster Butonlari (gecici gorsel; ikon/animasyon sonra giydirilecek)")]
@@ -1814,7 +1815,7 @@ namespace ColorCargoLoop
         void LiftTruck(TruckInfo t)
         {
             Vector3 p = t.root.position;
-            p.y = TruckLiftY;
+            p.y = TruckGroundY + dragLiftHeight; // Inspector'dan ayarlanir (tutunca pop)
             t.root.position = p;
         }
 
