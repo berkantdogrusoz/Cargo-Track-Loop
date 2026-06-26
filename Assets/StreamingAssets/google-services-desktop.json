@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "696453330530",
+    "project_id": "pixel-pour-77f13",
+    "storage_bucket": "pixel-pour-77f13.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:696453330530:android:2adceaf5ec7a90cd9fc33b",
+        "android_client_info": {
+          "package_name": "com.Altare.CandyCargo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDNe_xdneVDsD_eJ4sN1L2sZFUj7gg-lPc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

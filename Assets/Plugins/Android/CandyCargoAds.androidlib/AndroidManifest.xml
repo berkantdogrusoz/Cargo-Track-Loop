@@ -1,0 +1,9 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+        <uses-permission android:name="com.android.vending.BILLING" />
+<uses-permission android:name="android.permission.VIBRATE" />
+    <application>
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-1985873646762305~5366596066" />
+    </application>
+</manifest>
