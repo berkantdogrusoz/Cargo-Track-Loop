@@ -503,6 +503,7 @@ GameObject:
   - component: {fileID: 7478638}
   - component: {fileID: 7478640}
   - component: {fileID: 7478639}
+  - component: {fileID: 7478641}
   m_Layer: 5
   m_Name: "g\xFC\xE7 sat\u0131n alma panel "
   m_TagString: Untagged
@@ -568,6 +569,22 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 7478637}
   m_CullTransparentMesh: 1
+--- !u!114 &7478641
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 7478637}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cacacd26f24b7940a145b688d6391c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ColorCargoLoop.UIPopIn
+  duration: 0.5
+  startScale: 0
+  overshoot: 2.2
+  useUnscaledTime: 1
 --- !u!1 &29383910
 GameObject:
   m_ObjectHideFlags: 0
@@ -12719,6 +12736,7 @@ GameObject:
   - component: {fileID: 275154953}
   - component: {fileID: 275154952}
   - component: {fileID: 275154951}
+  - component: {fileID: 275154954}
   m_Layer: 5
   m_Name: lose panel
   m_TagString: Untagged
@@ -12772,7 +12790,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 275154950}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: 0.00015432}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -12781,9 +12799,25 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchoredPosition: {x: -3.5999756, y: -3.4197998}
+  m_SizeDelta: {x: 25.81, y: 49.33}
   m_Pivot: {x: 0.5, y: 0.5}
+--- !u!114 &275154954
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 275154950}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cacacd26f24b7940a145b688d6391c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ColorCargoLoop.UIPopIn
+  duration: 0.5
+  startScale: 0
+  overshoot: 2.2
+  useUnscaledTime: 1
 --- !u!21 &276633534
 Material:
   serializedVersion: 8
@@ -29354,6 +29388,7 @@ GameObject:
   - component: {fileID: 519425824}
   - component: {fileID: 519425826}
   - component: {fileID: 519425825}
+  - component: {fileID: 519425827}
   m_Layer: 5
   m_Name: "ma\u011Fza"
   m_TagString: Untagged
@@ -29420,6 +29455,22 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 519425823}
   m_CullTransparentMesh: 1
+--- !u!114 &519425827
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 519425823}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cacacd26f24b7940a145b688d6391c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ColorCargoLoop.UIPopIn
+  duration: 0.5
+  startScale: 0
+  overshoot: 2.2
+  useUnscaledTime: 1
 --- !u!1 &522668528
 GameObject:
   m_ObjectHideFlags: 0
@@ -39220,7 +39271,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!224 &1454624613
 RectTransform:
   m_ObjectHideFlags: 0
@@ -45952,6 +46003,7 @@ GameObject:
   - component: {fileID: 1766154600}
   - component: {fileID: 1766154599}
   - component: {fileID: 1766154601}
+  - component: {fileID: 1766154602}
   m_Layer: 5
   m_Name: win panel
   m_TagString: Untagged
@@ -45967,7 +46019,7 @@ RectTransform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1766154597}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalPosition: {x: 0, y: 0, z: -0}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children:
@@ -45985,8 +46037,8 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
-  m_SizeDelta: {x: 0, y: 0}
+  m_AnchoredPosition: {x: -3.5999756, y: -3.419983}
+  m_SizeDelta: {x: 25.81, y: 49.33}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1766154599
 MonoBehaviour:
@@ -46042,6 +46094,22 @@ MonoBehaviour:
   interval: 2
   repeat: 1
   startDelay: 0
+--- !u!114 &1766154602
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1766154597}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 0cacacd26f24b7940a145b688d6391c6, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::ColorCargoLoop.UIPopIn
+  duration: 0.5
+  startScale: 0
+  overshoot: 2.2
+  useUnscaledTime: 1
 --- !u!1 &1768177959
 GameObject:
   m_ObjectHideFlags: 0

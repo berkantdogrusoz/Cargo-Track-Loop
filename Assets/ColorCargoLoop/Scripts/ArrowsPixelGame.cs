@@ -1783,10 +1783,10 @@ namespace ColorCargoLoop
         void WireLoseButtons()
         {
             if (loseRestartButton != null) { loseRestartButton.onClick.RemoveListener(OnLoseRestart); loseRestartButton.onClick.AddListener(OnLoseRestart); }
-            if (loseSkipAdButton != null) { loseSkipAdButton.onClick.RemoveListener(OnLoseSkipAd); loseSkipAdButton.onClick.AddListener(OnLoseSkipAd); }
+            if (loseSkipAdButton != null) { loseSkipAdButton.onClick.RemoveListener(OnLoseSkipAd); loseSkipAdButton.onClick.AddListener(OnLoseSkipAd); loseSkipAdButton.gameObject.SetActive(false); } // Next/skip butonu lose'da gizli (kullanici istegi)
         }
 
-        void OnLoseRestart() { RestartLevel(); } // leveli bastan oyna
+        void OnLoseRestart() { EnsureAdsManager().ShowInterstitial(() => RestartLevel()); } // Again -> reklam izle, sonra leveli bastan oyna
 
         // MAGAZA: HUD butonu paneli acar, panel ici KAPAT butonu kapatir (atanmazsa sessiz gecer)
         void WireShop()
