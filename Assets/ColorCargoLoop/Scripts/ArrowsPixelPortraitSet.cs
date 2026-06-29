@@ -16,6 +16,7 @@ namespace ColorCargoLoop
         {
             public string name;
             public string[] rows;                         // potre satirlari (her char bir renk; '.' = bos)
+            public Color[] palette;                       // ADAPTIVE: bu gorselin KENDI renkleri (slot 0..11). Bos -> sabit candy palet.
             [TextArea(4, 40)] public string preview;      // okunabilir onizleme (importer doldurur, salt-bilgi)
         }
 
@@ -28,6 +29,14 @@ namespace ColorCargoLoop
             if (!HasPortraits) return null;
             string[][] arr = new string[portraits.Count][];
             for (int i = 0; i < portraits.Count; i++) arr[i] = portraits[i].rows;
+            return arr;
+        }
+
+        public Color[][] ToPalettesArray()
+        {
+            if (!HasPortraits) return null;
+            Color[][] arr = new Color[portraits.Count][];
+            for (int i = 0; i < portraits.Count; i++) arr[i] = portraits[i].palette;
             return arr;
         }
     }

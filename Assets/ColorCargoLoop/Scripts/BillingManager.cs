@@ -62,6 +62,17 @@ namespace ColorCargoLoop
 #endif
         }
 
+        /// <summary>Ayarlar paneli "Satin Alimlari Geri Yukle" butonu buraya baglanir.</summary>
+        public void Restore()
+        {
+#if UNITY_PURCHASING
+            if (storeController != null) { storeController.FetchPurchases(); Debug.Log("[Billing] restore: satin alimlar yeniden cekildi"); }
+            else Debug.LogWarning("[Billing] restore: magaza henuz hazir degil");
+#else
+            Debug.LogWarning("[Billing] Unity Purchasing kurulu degil; restore yok.");
+#endif
+        }
+
         void Grant(string productId)
         {
             foreach (var p in coinPacks)
@@ -70,6 +81,7 @@ namespace ColorCargoLoop
                 var game = FindObjectOfType<ArrowsPixelGame>();
                 if (game != null) game.AddCoins(p.coinAmount);
                 Analytics.Event("iap_buy_" + productId);
+                Altare.Analytics.AltareAnalytics.LogEvent("iap_purchase_success", new Dictionary<string, object> { { "sku", productId }, { "coins", p.coinAmount } });
                 return;
             }
         }

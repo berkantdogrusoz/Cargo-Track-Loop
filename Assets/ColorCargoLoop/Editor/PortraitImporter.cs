@@ -15,13 +15,13 @@ namespace ColorCargoLoop
     {
         const string PortraitFolder = "Assets/Art/Portraits";
         const string SetPath = "Assets/Art/Portraits/PortraitSet.asset";
-        const int TargetHeight = 32;       // potre yuksekligi (hucre); 32x32 item pack'leri icin 1:1 (~1024 kup tam-resim)
+        const int TargetHeight = 32;       // potre yuksekligi (hucre); 32 = eski iri kup boyutu/orani (kullanici tercihi). Box-filter+canlandirma ile sade okunur.
         const float AlphaThreshold = 0.5f;
         const bool FullScene = true;        // saydam zemini renkli doldur -> Pixel Flow tam-resim (item bir renkli sahnede). false = ikon stili
 
         struct Pal { public char ch; public Color col; public Pal(char c, Color k) { ch = c; col = k; } }
 
-        // CargoColorPalette ile AYNI 6 renk + char (P/B/Y/G/U/O)
+        // CargoColorPalette ile AYNI renkler + char (P/B/Y/G/U/O + K/C/T/L/W/N). Obstacle (siyah) BURADA YOK -> portreye girmez.
         static readonly Pal[] Palette =
         {
             new Pal('P', new Color(0.99f, 0.48f, 0.54f)), // Red
@@ -30,6 +30,12 @@ namespace ColorCargoLoop
             new Pal('G', new Color(0.57f, 0.90f, 0.68f)), // Green
             new Pal('U', new Color(0.77f, 0.63f, 1.00f)), // Purple
             new Pal('O', new Color(1.00f, 0.69f, 0.43f)), // Orange
+            new Pal('K', new Color(0.97f, 0.55f, 0.80f)), // Pink
+            new Pal('C', new Color(0.45f, 0.87f, 0.92f)), // Cyan
+            new Pal('T', new Color(0.22f, 0.68f, 0.62f)), // Teal
+            new Pal('L', new Color(0.74f, 0.92f, 0.38f)), // Lime
+            new Pal('W', new Color(0.68f, 0.50f, 0.37f)), // Brown
+            new Pal('N', new Color(0.46f, 0.45f, 0.85f)), // Indigo
         };
 
         [MenuItem("Color Cargo Loop/Import Portraits (PNG -> Potre)")]
@@ -115,10 +121,28 @@ namespace ColorCargoLoop
                 sb.Length = 0;
                 for (int rx = 0; rx < tw; rx++)
                 {
-                    int px = Mathf.Clamp(Mathf.FloorToInt((rx + 0.5f) / tw * sw), 0, sw - 1);
-                    int py = Mathf.Clamp(Mathf.FloorToInt((th - 1 - ry + 0.5f) / th * sh), 0, sh - 1); // y flip (texture bottom-up)
-                    Color c = src[py * sw + px];
-                    sb.Append(c.a < AlphaThreshold ? '.' : Nearest(c));
+                    // BOX FILTER: bu hucrenin kapsadigi kaynak blogunun ORTALAMASI -> detayli resim "rastgele" degil temsil edilir
+                    int sx0 = Mathf.Clamp(Mathf.FloorToInt((float)rx / tw * sw), 0, sw - 1);
+                    int sx1 = Mathf.Clamp(Mathf.CeilToInt((float)(rx + 1) / tw * sw), sx0 + 1, sw);
+                    int sy0 = Mathf.Clamp(Mathf.FloorToInt((float)(th - 1 - ry) / th * sh), 0, sh - 1); // y flip (texture bottom-up)
+                    int sy1 = Mathf.Clamp(Mathf.CeilToInt((float)(th - ry) / th * sh), sy0 + 1, sh);
+                    float ar = 0f, ag = 0f, ab = 0f, aa = 0f; int cnt = 0;
+                    for (int yy = sy0; yy < sy1; yy++)
+                        for (int xx = sx0; xx < sx1; xx++)
+                        {
+                            Color c = src[yy * sw + xx];
+                            ar += c.r; ag += c.g; ab += c.b; aa += c.a; cnt++;
+                        }
+                    if (cnt > 0) { ar /= cnt; ag /= cnt; ab /= cnt; aa /= cnt; }
+                    if (aa < AlphaThreshold) { sb.Append('.'); }
+                    else
+                    {
+                        // CANLANDIR: doygunluk + kontrast artir -> bolgeler Pixel Flow gibi daha net/parlak ayrissin
+                        float hh, ss, vv; Color.RGBToHSV(new Color(ar, ag, ab), out hh, out ss, out vv);
+                        ss = Mathf.Clamp01(ss * 1.55f + 0.06f);       // doygunluk
+                        vv = Mathf.Clamp01((vv - 0.5f) * 1.22f + 0.5f); // kontrast (acik/koyu ayrissin)
+                        sb.Append(Nearest(Color.HSVToRGB(hh, ss, vv)));
+                    }
                 }
                 rows[ry] = sb.ToString();
             }
@@ -135,6 +159,140 @@ namespace ColorCargoLoop
                 if (d < best) { best = d; bch = p.ch; }
             }
             return bch;
+        }
+
+        // ============================================================
+        // ADAPTIVE: gorselin KENDI ~12 baskin rengini cikarir (median-cut) ve hucreleri ONA quantize eder.
+        // Donen rows char'lari slot 0..11; gercek renkler 'palette' ile gelir (runtime CargoColorPalette.Override).
+        // ============================================================
+        const int PaletteCount = 12;
+        static readonly char[] SlotChars = { 'P', 'B', 'Y', 'G', 'U', 'O', 'K', 'C', 'T', 'L', 'W', 'N' };
+
+        static string[] ConvertTextureAdaptive(string path, out Color[] palette)
+        {
+            palette = null;
+            var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            if (importer != null)
+            {
+                bool need = !importer.isReadable || importer.textureCompression != TextureImporterCompression.Uncompressed
+                    || importer.npotScale != TextureImporterNPOTScale.None || importer.mipmapEnabled || importer.maxTextureSize < 2048;
+                if (need)
+                {
+                    importer.isReadable = true; importer.textureCompression = TextureImporterCompression.Uncompressed;
+                    importer.npotScale = TextureImporterNPOTScale.None; importer.mipmapEnabled = false;
+                    importer.filterMode = FilterMode.Point; importer.maxTextureSize = 2048; importer.SaveAndReimport();
+                }
+            }
+            var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+            if (tex == null) return null;
+            int sw = tex.width, sh = tex.height;
+            int th = Mathf.Clamp(TargetHeight, 8, 48);
+            int tw = Mathf.Max(4, Mathf.RoundToInt((float)sw / sh * th));
+            tw = Mathf.Min(tw, th);
+            Color[] src = tex.GetPixels();
+
+            // 1) her hucre rengi: box-filter + hafif canlandirma
+            Color[,] cell = new Color[th, tw];
+            bool[,] solid = new bool[th, tw];
+            for (int ry = 0; ry < th; ry++)
+                for (int rx = 0; rx < tw; rx++)
+                {
+                    int sx0 = Mathf.Clamp(Mathf.FloorToInt((float)rx / tw * sw), 0, sw - 1);
+                    int sx1 = Mathf.Clamp(Mathf.CeilToInt((float)(rx + 1) / tw * sw), sx0 + 1, sw);
+                    int sy0 = Mathf.Clamp(Mathf.FloorToInt((float)(th - 1 - ry) / th * sh), 0, sh - 1);
+                    int sy1 = Mathf.Clamp(Mathf.CeilToInt((float)(th - ry) / th * sh), sy0 + 1, sh);
+                    float ar = 0, ag = 0, ab = 0, aa = 0; int cnt = 0;
+                    for (int yy = sy0; yy < sy1; yy++) for (int xx = sx0; xx < sx1; xx++) { Color c = src[yy * sw + xx]; ar += c.r; ag += c.g; ab += c.b; aa += c.a; cnt++; }
+                    if (cnt > 0) { ar /= cnt; ag /= cnt; ab /= cnt; aa /= cnt; }
+                    if (aa < AlphaThreshold) { solid[ry, rx] = false; continue; }
+                    float hh, ss, vv; Color.RGBToHSV(new Color(ar, ag, ab), out hh, out ss, out vv);
+                    ss = Mathf.Clamp01(ss * 1.30f + 0.03f); vv = Mathf.Clamp01((vv - 0.5f) * 1.10f + 0.5f);
+                    cell[ry, rx] = Color.HSVToRGB(hh, ss, vv); solid[ry, rx] = true;
+                }
+
+            // 1b) ARKA PLAN TEMIZLE: kenarlardan flood-fill, KOSE rengine (bg) yakin hucreleri BOS yap.
+            //     -> beyaz/duz zemin potre arkasiyla karismaz; ozne korunur (icteki beyaz silinmez cunku kenara bagli degil).
+            Color bg = new Color(0, 0, 0); int bgn = 0;
+            int[][] corners = { new[] { 0, 0 }, new[] { 0, tw - 1 }, new[] { th - 1, 0 }, new[] { th - 1, tw - 1 } };
+            foreach (var co in corners) if (solid[co[0], co[1]]) { bg += cell[co[0], co[1]]; bgn++; }
+            if (bgn > 0)
+            {
+                bg /= bgn;
+                float bgT2 = 0.17f * 0.17f;
+                bool[,] isBg = new bool[th, tw];
+                var q = new System.Collections.Generic.Queue<int>();
+                System.Action<int, int> seed = (ry, rx) =>
+                {
+                    if (ry < 0 || ry >= th || rx < 0 || rx >= tw || !solid[ry, rx] || isBg[ry, rx]) return;
+                    float dr = cell[ry, rx].r - bg.r, dg = cell[ry, rx].g - bg.g, db = cell[ry, rx].b - bg.b;
+                    if (dr * dr + dg * dg + db * db <= bgT2) { isBg[ry, rx] = true; q.Enqueue(ry * tw + rx); }
+                };
+                for (int rx = 0; rx < tw; rx++) { seed(0, rx); seed(th - 1, rx); }
+                for (int ry = 0; ry < th; ry++) { seed(ry, 0); seed(ry, tw - 1); }
+                while (q.Count > 0) { int ix = q.Dequeue(); int ry = ix / tw, rx = ix % tw; seed(ry - 1, rx); seed(ry + 1, rx); seed(ry, rx - 1); seed(ry, rx + 1); }
+                for (int ry = 0; ry < th; ry++) for (int rx = 0; rx < tw; rx++) if (isBg[ry, rx]) solid[ry, rx] = false;
+            }
+
+            // 2) palette: KALAN (ozne) hucrelerden median-cut
+            var sample = new System.Collections.Generic.List<Color>(th * tw);
+            for (int ry = 0; ry < th; ry++) for (int rx = 0; rx < tw; rx++) if (solid[ry, rx]) sample.Add(cell[ry, rx]);
+            palette = MedianCut(sample, PaletteCount);
+            if (palette == null || palette.Length == 0) palette = new[] { Color.gray };
+
+            // 3) her hucreyi cikarilan palette'e EN YAKIN slot'a esle
+            string[] rows = new string[th];
+            var sb = new StringBuilder();
+            for (int ry = 0; ry < th; ry++)
+            {
+                sb.Length = 0;
+                for (int rx = 0; rx < tw; rx++)
+                {
+                    if (!solid[ry, rx]) { sb.Append('.'); continue; }
+                    int best = 0; float bd = float.MaxValue;
+                    for (int p = 0; p < palette.Length; p++)
+                    {
+                        float dr = cell[ry, rx].r - palette[p].r, dg = cell[ry, rx].g - palette[p].g, db = cell[ry, rx].b - palette[p].b;
+                        float d = dr * dr + dg * dg + db * db; if (d < bd) { bd = d; best = p; }
+                    }
+                    sb.Append(best < SlotChars.Length ? SlotChars[best] : 'P');
+                }
+                rows[ry] = sb.ToString();
+            }
+            return rows;
+        }
+
+        static Color[] MedianCut(System.Collections.Generic.List<Color> colors, int count)
+        {
+            if (colors == null || colors.Count == 0) return null;
+            var boxes = new System.Collections.Generic.List<System.Collections.Generic.List<Color>>();
+            boxes.Add(new System.Collections.Generic.List<Color>(colors));
+            while (boxes.Count < count)
+            {
+                int bi = -1, bch = 0; float bestRange = -1f;
+                for (int i = 0; i < boxes.Count; i++)
+                {
+                    var bx = boxes[i]; if (bx.Count < 2) continue;
+                    float mnr = 1, mxr = 0, mng = 1, mxg = 0, mnb = 1, mxb = 0;
+                    foreach (var c in bx) { if (c.r < mnr) mnr = c.r; if (c.r > mxr) mxr = c.r; if (c.g < mng) mng = c.g; if (c.g > mxg) mxg = c.g; if (c.b < mnb) mnb = c.b; if (c.b > mxb) mxb = c.b; }
+                    float rr = mxr - mnr, rg = mxg - mng, rb = mxb - mnb;
+                    float range = Mathf.Max(rr, Mathf.Max(rg, rb));
+                    if (range > bestRange) { bestRange = range; bi = i; bch = (rr >= rg && rr >= rb) ? 0 : (rg >= rb ? 1 : 2); }
+                }
+                if (bi < 0) break;
+                var box = boxes[bi];
+                box.Sort((a, b) => (bch == 0 ? a.r : bch == 1 ? a.g : a.b).CompareTo(bch == 0 ? b.r : bch == 1 ? b.g : b.b));
+                int mid = box.Count / 2;
+                var b1 = box.GetRange(0, mid);
+                var b2 = box.GetRange(mid, box.Count - mid);
+                boxes.RemoveAt(bi); boxes.Add(b1); boxes.Add(b2);
+            }
+            var pal = new Color[boxes.Count];
+            for (int i = 0; i < boxes.Count; i++)
+            {
+                float r = 0, g = 0, b = 0; foreach (var c in boxes[i]) { r += c.r; g += c.g; b += c.b; }
+                int n = Mathf.Max(1, boxes[i].Count); pal[i] = new Color(r / n, g / n, b / n, 1f);
+            }
+            return pal;
         }
 
         // --- 8 farkli dikey pixel-art PNG uretir (kalp/ay/yildiz/kedi/balik/hayalet/cicek/mantar).
@@ -261,6 +419,10 @@ namespace ColorCargoLoop
         static string[] ApplyFullScene(string[] rows, int idx)
         {
             if (rows == null || rows.Length == 0) return rows;
+            // TAM-OPAK resim (saydam '.' yok): zaten dolu -> zemin/yildiz EKLEME (gereksiz gurultu olmasin)
+            bool anyEmpty = false;
+            foreach (var rr in rows) if (rr != null && rr.IndexOf('.') >= 0) { anyEmpty = true; break; }
+            if (!anyEmpty) return rows;
             char bg = SceneBg[idx % SceneBg.Length];
             char acc = (bg == 'Y') ? 'O' : 'Y';
             int H = rows.Length, W = 0;

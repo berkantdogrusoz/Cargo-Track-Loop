@@ -12,9 +12,20 @@ namespace ColorCargoLoop
     {
         static float lastTime = -10f;
 
+        // Ayarlar paneli: titresim ac-kapa (PlayerPrefs'e kalici yazilir)
+        const string PrefHapticsOn = "set_haptics_on";
+        static bool? _enabled;
+        public static bool Enabled
+        {
+            get { if (_enabled == null) _enabled = PlayerPrefs.GetInt(PrefHapticsOn, 1) == 1; return _enabled.Value; }
+        }
+        public static void SetEnabled(bool on) { _enabled = on; PlayerPrefs.SetInt(PrefHapticsOn, on ? 1 : 0); PlayerPrefs.Save(); }
+        public static bool Toggle() { SetEnabled(!Enabled); return Enabled; }
+
         /// <summary>Kisa tik titresim. minInterval: ardarda cagrilarda en kisa aralik (sn) -> spam onler.</summary>
         public static void Light(float minInterval = 0.06f, long ms = 24, int amplitude = 135)
         {
+            if (!Enabled) return;
             if (Time.unscaledTime - lastTime < minInterval) return;
             lastTime = Time.unscaledTime;
             Vibrate(ms, amplitude);

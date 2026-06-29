@@ -16,12 +16,13 @@ namespace ColorCargoLoop
         [Tooltip("Sirayla mi patlasin (true) yoksa hepsi ayni anda mi (false).")]
         [SerializeField] private bool sequential = true;
         [SerializeField] private float sequenceDelay = 0.35f; // sirali patlama araligi (sn)
+        [Tooltip("Panel pop-in animasyonu bitene kadar bekle (partikuller scale~0'da patlayip kaybolmasin).")]
+        [SerializeField] private float startDelay = 0.4f;
 
         void OnEnable()
         {
             StopAllCoroutines();
-            if (sequential) StartCoroutine(PlaySequence());
-            else PlayAll();
+            StartCoroutine(PlayRoutine());
         }
 
         void OnDisable()
@@ -44,9 +45,11 @@ namespace ColorCargoLoop
                 if (ps != null) ps.Stop(true, ParticleSystemStopBehavior.StopEmittingAndClear);
         }
 
-        IEnumerator PlaySequence()
+        IEnumerator PlayRoutine()
         {
+            if (startDelay > 0f) yield return new WaitForSecondsRealtime(startDelay); // pop-in bitsin, sonra patlat
             if (fireworks == null) yield break;
+            if (!sequential) { PlayAll(); yield break; }
             WaitForSecondsRealtime wait = new WaitForSecondsRealtime(sequenceDelay);
             foreach (ParticleSystem ps in fireworks)
             {

@@ -11,6 +11,8 @@ dependencies {
     // implementation 'com.google.android.gms:play-services-ads:25.3.0' // Packages/com.google.ads.mobile/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:7
     implementation 'com.google.android.gms:play-services-ads:25.4.0' // Assets/ColorCargoLoop/Editor/AdMobDependencies.xml:3
     implementation 'com.google.android.gms:play-services-base:18.10.0' // Assets/Firebase/Editor/AppDependencies.xml:20
+    implementation 'com.google.android.play:core-common:2.0.0' // Assets/GooglePlayPlugins/com.google.play.core/Editor/Dependencies.xml:3
+    implementation 'com.google.android.play:review:2.0.0' // Assets/GooglePlayPlugins/com.google.play.review/Editor/Dependencies.xml:3
     implementation 'com.google.android.ump:user-messaging-platform:4.0.0' // Packages/com.google.ads.mobile/GoogleMobileAds/Editor/GoogleUmpDependencies.xml:7
     implementation 'com.google.firebase:firebase-analytics:23.2.0' // Assets/Firebase/Editor/RemoteConfigDependencies.xml:18
     implementation 'com.google.firebase:firebase-analytics-unity:13.12.0' // Assets/Firebase/Editor/AnalyticsDependencies.xml:21
@@ -22,6 +24,8 @@ dependencies {
     implementation 'com.google.firebase:firebase-config-unity:13.12.0' // Assets/Firebase/Editor/RemoteConfigDependencies.xml:23
     implementation 'com.google.firebase:firebase-crashlytics-ndk:20.0.6' // Assets/Firebase/Editor/CrashlyticsDependencies.xml:16
     implementation 'com.google.firebase:firebase-crashlytics-unity:13.12.0' // Assets/Firebase/Editor/CrashlyticsDependencies.xml:23
+    implementation 'com.google.firebase:firebase-firestore:26.3.0' // Assets/Firebase/Editor/FirestoreDependencies.xml:16
+    implementation 'com.google.firebase:firebase-firestore-unity:13.12.0' // Assets/Firebase/Editor/FirestoreDependencies.xml:23
 // Android Resolver Dependencies End
 **DEPS**}
 

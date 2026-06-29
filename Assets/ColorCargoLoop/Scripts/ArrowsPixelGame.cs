@@ -51,6 +51,7 @@ namespace ColorCargoLoop
         public string[] cellMask;
         public ArrowsPixelTruckSpawn[] trucks;
         public ArrowsPixelExitGate[] exits;
+        public Color[] palette;   // ADAPTIVE: bu levelin portre renkleri (slot 0..11). null -> sabit candy palet.
     }
 
     public static class ArrowsPixelLevelLibrary
@@ -58,6 +59,7 @@ namespace ColorCargoLoop
         // Importer'in urettigi potreler (PortraitSet -> ArrowsPixelGame baslangicta atar).
         // Doluysa geometrik potreler yerine BUNLAR kullanilir; truck/kapasite otomatik uyarlanir.
         public static string[][] PortraitOverride;
+        public static Color[][] PortraitPaletteOverride;  // ADAPTIVE: her portrenin KENDI renkleri (rows ile ayni index)
 
         // ============================================================
         // ZORLUK SABLONLARI (el-tasarimi, KANITLANMIS cozulebilir dizilimler)
@@ -130,6 +132,8 @@ namespace ColorCargoLoop
             return 4;               // 9+ cok zor
         }
 
+        // Renk sayisi (portre + eslesen sepet renkleri). Obstacle (siyah) buna DAHIL DEGIL.
+        public const int PaletteSize = 12;
         const int NewBoardPreviewLevels = 10;
         const int LegacyBoardShapeCount = 5;
         const int BoardShapeVariantCount = 15;
@@ -154,7 +158,7 @@ namespace ColorCargoLoop
             System.Random rng = new System.Random(level * 1013904223 + 7);
             string[] portrait = PortraitForLevel(level);
             int[] pcounts = CountPortraitColors(portrait);
-            int present = 0; for (int i = 0; i < 6; i++) if (pcounts[i] > 0) present++;
+            int present = 0; for (int i = 0; i < PaletteSize; i++) if (pcounts[i] > 0) present++;
             if (present == 0) present = 1;
 
             // BOARD: ilk 10 level yeni board formlarini test ettirir; eski buyume/random akis 11. levelden sonra baslar.
@@ -227,6 +231,7 @@ namespace ColorCargoLoop
 
             AssignColorsByGateDistance(def, gates, level);   // BOLME her level + matching kapidan UZAK, engel kapida
             ApplyTruckCapacitiesFromPortrait(def);           // ayni-renk sepetlere kapasite otomatik bolunur
+            def.palette = PaletteForLevel(level);            // ADAPTIVE palet (portre kendi renkleri; yoksa null)
             return def;
         }
 
@@ -407,7 +412,7 @@ namespace ColorCargoLoop
         {
             int[] counts = CountPortraitColors(def.portraitRows);
             System.Collections.Generic.List<int> order = new System.Collections.Generic.List<int>();
-            for (int i = 0; i < 6; i++) order.Add(i);
+            for (int i = 0; i < PaletteSize; i++) order.Add(i);
             order.Sort((a, b) => counts[b].CompareTo(counts[a]));
             System.Collections.Generic.List<CargoColor> present = new System.Collections.Generic.List<CargoColor>();
             System.Collections.Generic.List<int> presentCounts = new System.Collections.Generic.List<int>();
@@ -436,6 +441,7 @@ namespace ColorCargoLoop
             int obstacleCount = absent.Count > 0
                 ? Mathf.Clamp(Mathf.Max(gates.Length, Mathf.RoundToInt(n * Mathf.Lerp(0.10f, 0.40f, curve))), 0, n - present.Count)
                 : 0;
+            if (level <= 5) obstacleCount = 0;   // ILK 5 LEVEL (intro): engel sepet yok
             int matchCount = n - obstacleCount;
             int[] bpc = DistributeBaskets(presentCounts, matchCount);            // her present >=1 + orantili bolme
             System.Collections.Generic.List<CargoColor> matchColors = new System.Collections.Generic.List<CargoColor>();
@@ -445,7 +451,7 @@ namespace ColorCargoLoop
             for (int r = 0; r < n; r++)
             {
                 int k = sortIdx[r];
-                if (r < obstacleCount) trucks[k].color = absent[r % absent.Count];      // kapiya yakin = ENGEL
+                if (r < obstacleCount) trucks[k].color = CargoColor.Obstacle;             // kapiya yakin = ENGEL (siyah)
                 else trucks[k].color = matchColors[r - obstacleCount];                  // uzak = ESLESEN
             }
         }
@@ -459,7 +465,7 @@ namespace ColorCargoLoop
         {
             int[] counts = CountPortraitColors(def.portraitRows);
             System.Collections.Generic.List<int> order = new System.Collections.Generic.List<int>();
-            for (int i = 0; i < 6; i++) order.Add(i);
+            for (int i = 0; i < PaletteSize; i++) order.Add(i);
             order.Sort((a, b) => counts[b].CompareTo(counts[a]));   // cok kuplu renk once
 
             System.Collections.Generic.List<CargoColor> present = new System.Collections.Generic.List<CargoColor>();
@@ -482,7 +488,7 @@ namespace ColorCargoLoop
                 for (int k = 0; k < n; k++)
                 {
                     if (k < present.Count) slotColors.Add(present[k]);
-                    else { int oi = k - present.Count; slotColors.Add(absent.Count > 0 ? absent[oi % absent.Count] : present[oi % present.Count]); }
+                    else { int oi = k - present.Count; slotColors.Add((absent.Count > 0 && level > 5) ? CargoColor.Obstacle : present[oi % present.Count]); }
                 }
             }
             else
@@ -493,7 +499,7 @@ namespace ColorCargoLoop
                 int[] bpc = DistributeBaskets(presentCounts, matchSlots);   // her present renge kac sepet
                 for (int i = 0; i < present.Count; i++)
                     for (int j = 0; j < bpc[i]; j++) slotColors.Add(present[i]);
-                for (int o = 0; o < obstacleSlots; o++) slotColors.Add(absent[o % absent.Count]);
+                for (int o = 0; o < obstacleSlots; o++) slotColors.Add(CargoColor.Obstacle);
                 while (slotColors.Count < n) slotColors.Add(present[slotColors.Count % present.Count]); // guvenlik
             }
 
@@ -752,7 +758,7 @@ namespace ColorCargoLoop
 
         public static int[] CountPortraitColors(string[] rows) // ArrowsPixelGame.ValidateActiveLevel de kullanir
         {
-            int[] counts = new int[6];
+            int[] counts = new int[PaletteSize];
             if (rows == null) return counts;
 
             for (int y = 0; y < rows.Length; y++)
@@ -772,15 +778,23 @@ namespace ColorCargoLoop
 
         static int CharToCargoIndex(char ch)
         {
+            // Sayim ASIL SPAWN ile birebir olmali: PicCube '.' DISINDAKI her char icin kup uretir
+            // (CharToCargo: bilinmeyen -> Red). O yuzden burada da '.' haric her char sayilir.
             switch (ch)
             {
-                case 'P': return 0;
+                case '.': return -1;   // tek bos isareti (spawn da sadece '.'i atlar)
                 case 'B': return 1;
                 case 'Y': return 2;
                 case 'G': return 3;
                 case 'U': return 4;
                 case 'O': return 5;
-                default: return -1;
+                case 'K': return 6;
+                case 'C': return 7;
+                case 'T': return 8;
+                case 'L': return 9;
+                case 'W': return 10;
+                case 'N': return 11;
+                default: return 0;     // 'P' + bilinmeyen char -> Red (CharToCargo default ile ayni)
             }
         }
 
@@ -793,8 +807,21 @@ namespace ColorCargoLoop
                 case 3: return CargoColor.Green;
                 case 4: return CargoColor.Purple;
                 case 5: return CargoColor.Orange;
+                case 6: return CargoColor.Pink;
+                case 7: return CargoColor.Cyan;
+                case 8: return CargoColor.Teal;
+                case 9: return CargoColor.Lime;
+                case 10: return CargoColor.Brown;
+                case 11: return CargoColor.Indigo;
                 default: return CargoColor.Red;
             }
+        }
+
+        static Color[] PaletteForLevel(int level)
+        {
+            if (PortraitPaletteOverride != null && PortraitPaletteOverride.Length > 0)
+                return PortraitPaletteOverride[(Mathf.Max(1, level) - 1) % PortraitPaletteOverride.Length];
+            return null;
         }
 
         static string[] PortraitForLevel(int level)
@@ -1289,6 +1316,90 @@ namespace ColorCargoLoop
         [Tooltip("Magaza panelindeki KAPAT (X) butonu.")]
         [SerializeField] private UnityEngine.UI.Button shopCloseButton;
 
+        [Header("Ayarlar Paneli (Berkant tasarlar; kod baglar)")]
+        [Tooltip("Ayar paneli (kapali baslar). Canvas'ta kur+bagla.")]
+        [SerializeField] private GameObject settingsPanel;
+        [Tooltip("HUD'da AYARLAR (disli) butonu -> paneli acar.")]
+        [SerializeField] private UnityEngine.UI.Button settingsOpenButton;
+        [Tooltip("Panel: KAPAT (X) butonu.")]
+        [SerializeField] private UnityEngine.UI.Button settingsCloseButton;
+        [Tooltip("Ses efektleri AC/KAPA butonu.")]
+        [SerializeField] private UnityEngine.UI.Button sfxToggleButton;
+        [Tooltip("Muzik AC/KAPA butonu.")]
+        [SerializeField] private UnityEngine.UI.Button musicToggleButton;
+        [Tooltip("Titresim (haptik) AC/KAPA butonu.")]
+        [SerializeField] private UnityEngine.UI.Button hapticsToggleButton;
+        [Tooltip("Satin alimlari geri yukle butonu (IAP).")]
+        [SerializeField] private UnityEngine.UI.Button restorePurchasesButton;
+        [Tooltip("Gizlilik Politikasi linki butonu.")]
+        [SerializeField] private UnityEngine.UI.Button privacyPolicyButton;
+        [Tooltip("Kullanim Sartlari linki butonu.")]
+        [SerializeField] private UnityEngine.UI.Button termsButton;
+        [Tooltip("Gizlilik Politikasi URL'si (Inspector'a yapistir).")]
+        [SerializeField] private string privacyPolicyUrl = "";
+        [Tooltip("Kullanim Sartlari URL'si (Inspector'a yapistir).")]
+        [SerializeField] private string termsUrl = "";
+        [Tooltip("KAPALI ayar butonunun rengi (grimsi). ACIK = tam renk (beyaz tint).")]
+        [SerializeField] private Color settingsOffTint = new Color(0.5f, 0.5f, 0.5f, 1f);
+
+        [Header("Ayar Butonlari Giris Animasyonu (sagdan kayarak)")]
+        [Tooltip("Panel acilinca butonlar sagdan SIRAYLA kayarak gelsin.")]
+        [SerializeField] private bool settingsSlideInEnabled = true;
+        [Tooltip("Butonlar ekran disindan ne kadar saga baslar (px).")]
+        [SerializeField] private float settingsSlideFromX = 700f;
+        [Tooltip("Her butonun kayma suresi (sn).")]
+        [SerializeField, Range(0.1f, 1.2f)] private float settingsSlideDuration = 0.35f;
+        [Tooltip("Butonlar arasi gecikme (sirayla gelsin diye, sn).")]
+        [SerializeField, Range(0f, 0.5f)] private float settingsSlideStagger = 0.08f;
+        readonly System.Collections.Generic.Dictionary<RectTransform, Vector2> _settingsBtnHome = new System.Collections.Generic.Dictionary<RectTransform, Vector2>();
+        Coroutine _settingsSlideCo;
+
+        [Header("Egitim (Tutorial) - sadece Level 1, bir kez")]
+        [SerializeField] private bool tutorialEnabled = true;
+        [Tooltip("Konusma paneli (balon + TMP yazi icinde). Kapali baslar; Berkant tasarlar. EKRANA tiklayinca ilerlemesi icin TAM EKRAN olmali.")]
+        [SerializeField] private GameObject tutorialPanel;
+        [Tooltip("Panel icindeki TextMeshPro yazi (mesajlar buraya yazilir).")]
+        [SerializeField] private TMPro.TMP_Text tutorialText;
+        [Tooltip("Sirayla gosterilecek mesajlar. Oyuncu ekrana tikladikca degisir; son mesajdan sonra panel kapanir.")]
+        [TextArea(2, 4)] [SerializeField] private string[] tutorialMessages = new[] {
+            "Merhaba! Hadi oynamayi ogrenelim.",
+            "Yukaridaki resmi ayni renk kuplerle doldurmamiz gerek.",
+            "Sepetleri surukleyip kapidan cikar; kupler resme yerlesir.",
+            "Tum kupler yerlesince bolumu kazanirsin. Hadi dene!"
+        };
+        [Tooltip("Panel bitince 'sepet surukle' isareti yapan EL SPRITE'i. Kod runtime'da UI Image olusturur (sen sadece SPRITE at).")]
+        [SerializeField] private Sprite tutorialHandSprite;
+        [Tooltip("El boyutu (px).")]
+        [SerializeField] private float tutorialHandSize = 120f;
+        [Tooltip("El surukleme yonu/mesafesi (px).")]
+        [SerializeField] private Vector2 tutorialHandDragOffset = new Vector2(0f, -140f);
+        [Tooltip("Bu kadar saniye hamle yapilmazsa el ipucu tekrar gosterilir. 0 = kapali.")]
+        [SerializeField] private float idleHintDelay = 5f;
+        [Tooltip("El ipucu SADECE bu level'e kadar gosterilir (1 = sadece Level 1). Diger levellerde cikmaz.")]
+        [SerializeField] private int idleHintMaxLevel = 1;
+        const string SaveKeyTutorial = "ccl_tutorial_done";
+        bool tutorialActive;
+        int tutorialStep;
+        Coroutine tutorialHandCo;
+        GameObject _tutorialHandGO;
+        bool handHintShowing;
+        float lastMoveTime;
+
+        [Header("Win: Coin Patlamasi (devam butonu)")]
+        [Tooltip("Sacilan coin SPRITE'i (sen atarsin). Bos -> sadece ses.")]
+        [SerializeField] private Sprite coinBurstSprite;
+        [Tooltip("Kac adet coin sacilsin.")]
+        [SerializeField] private int coinBurstCount = 8;
+        [Tooltip("Coin boyutu (px).")]
+        [SerializeField] private float coinBurstSize = 64f;
+        [Tooltip("Coin sesi (SFX). Bos -> ses yok.")]
+        [SerializeField] private AudioClip coinBurstSound;
+        [Tooltip("Coinlerin saciagi merkez (RectTransform). Bos -> win panel ortasi.")]
+        [SerializeField] private RectTransform coinBurstAnchor;
+        [Tooltip("Patlama sonrasi sonraki levele gecis gecikmesi (sn). 0 = aninda.")]
+        [SerializeField] private float winContinueDelay = 0.7f;
+        bool _winContinuing;
+
         [Header("Reklamlar")]
         [SerializeField] private AdsManager adsManager;
         [SerializeField, Range(2, 3)] private int interstitialEveryLevels = 3;
@@ -1358,6 +1469,18 @@ namespace ColorCargoLoop
         [SerializeField] private bool useSingleMeshBoard = false;
         [SerializeField] private Color wallColor       = new Color(0.93f, 0.94f, 1.00f); // moduler duvar + kapi postu
 
+        [Header("Board Duvar Dalgasi (Meksika dalgasi)")]
+        [Tooltip("Duvarlarda sirayla kalk-in dalga animasyonu ac/kapa.")]
+        [SerializeField] private bool boardWallWaveEnabled = true;
+        [Tooltip("Segment ne kadar kalkar (lokal-Y).")]
+        [SerializeField, Range(0f, 0.5f)] private float boardWallWaveAmplitude = 0.16f;
+        [Tooltip("Dalganin ilerleme hizi (segment/saniye).")]
+        [SerializeField, Range(1f, 20f)] private float boardWallWaveSpeed = 5f;
+        [Tooltip("Ayni anda kac segment havada (dar = tek tek belirgin).")]
+        [SerializeField, Range(0.5f, 4f)] private float boardWallWaveWidth = 1.5f;
+        [Tooltip("Bir tur bitince bekleme (belli aralik, sn).")]
+        [SerializeField, Range(0f, 4f)] private float boardWallWavePause = 1.0f;
+
         [Header("Toon Gorunum (cartoon outline + golge; canli)")]
         [SerializeField] private bool useToonShader = true; // true = ESKI TOON (outline'li, kesin); false = parlak/Lit/bloom deneme (kullanici begenmedi -> toon'a donuldu)
         [SerializeField] private Color toonOutlineColor = new Color(0.11f, 0.08f, 0.17f, 1f); // cizgi rengi (koyu)
@@ -1385,6 +1508,8 @@ namespace ColorCargoLoop
             // Importer potreleri (PNG'lerden) varsa geometrik potreler yerine onlar kullanilir
             ArrowsPixelLevelLibrary.PortraitOverride = (portraitSet != null && portraitSet.HasPortraits)
                 ? portraitSet.ToRowsArray() : null;
+            ArrowsPixelLevelLibrary.PortraitPaletteOverride = (portraitSet != null && portraitSet.HasPortraits)
+                ? portraitSet.ToPalettesArray() : null;
 
             if (saveProgress) currentLevel = Mathf.Max(1, PlayerPrefs.GetInt(SaveKeyLevel, currentLevel)); // kayitli bolumden devam et
             if (saveProgress) coinAmount = PlayerPrefs.GetInt(SaveKeyCoin, StartingCoinAmount);           // ilk kurulumda 1000, sonra kayitli coin
@@ -1453,13 +1578,19 @@ namespace ColorCargoLoop
                 case 'G': return CargoColor.Green;
                 case 'U': return CargoColor.Purple;
                 case 'O': return CargoColor.Orange;
+                case 'K': return CargoColor.Pink;
+                case 'C': return CargoColor.Cyan;
+                case 'T': return CargoColor.Teal;
+                case 'L': return CargoColor.Lime;
+                case 'W': return CargoColor.Brown;
+                case 'N': return CargoColor.Indigo;
                 default:  return CargoColor.Red; // P = candy pembe-kirmizi
             }
         }
 
         static Color CharColor(char ch)
         {
-            return ch == 'B' ? C_BLUE : ch == 'Y' ? C_YELLOW : ch == 'G' ? C_GREEN : ch == 'U' ? C_PURPLE : ch == 'O' ? C_ORANGE : C_PINK;
+            return CargoColorPalette.ToColor(CharToCargo(ch)); // 12 renk + sepet rengiyle BIREBIR ayni (eski 6-renk C_ sabitleri yerine palet)
         }
 
         public void BuildLayout()
@@ -1473,6 +1604,7 @@ namespace ColorCargoLoop
             trucks.Clear(); slotList.Clear(); cubesByColor.Clear(); activeCubeTransfers = 0; moveCount = 0; inputLocked = false; gstate = GameState.Playing; levelTransitionPending = false;
             ApplyMobilePerformanceProfile();
             ResolveActiveLevel();
+            CargoColorPalette.Override = (activeLevel != null && activeLevel.palette != null && activeLevel.palette.Length > 0) ? activeLevel.palette : null; // ADAPTIVE palet
             ValidateActiveLevel();
             ApplyReferenceVisualProfile();
             useSingleMeshBoard = false; // eski moduler board tasarimi zorunlu; shader/material tarafina dokunma
@@ -1484,8 +1616,10 @@ namespace ColorCargoLoop
             if (losePanel != null) losePanel.SetActive(false);
             if (shopPanel != null) shopPanel.SetActive(false); // magaza kapali baslar
             if (boosterShopPanel != null) boosterShopPanel.SetActive(false); // power-up satin alma kapali baslar
+            if (settingsPanel != null) settingsPanel.SetActive(false); // ayarlar paneli kapali baslar
             WireNextButton();
             WireLoseButtons();
+            WireSettings();
             WireShop();
             WireBoosterShop();
             DisableLayoutPadOutlines();
@@ -1497,6 +1631,7 @@ namespace ColorCargoLoop
 
             BuildSlots(1.0f);           // slotPoints atanmissa onlari kullanir
             BuildParking(-3.0f);        // parkingArea atanmissa onu merkez alir
+            SetupBoardWallWave();       // board duvarlarinda meksika dalgasi (sirayla kalk-in)
             try
             {
                 BuildPictureGrid(3.7f); // pictureArea atanmissa oraya kurar
@@ -1518,6 +1653,9 @@ namespace ColorCargoLoop
             EnsureAdsManager();
             NotificationManager.Instance.CancelReminders(); // oyuncu oyunda -> bekleyen hatirlaticilari iptal et + sistemi olustur (arka plana gidince planlar)
             Analytics.LevelStart(currentLevel);
+            AltareLog("level_start", new Dictionary<string, object> { { "level", currentLevel } });
+            TryStartTutorial();   // sadece Level 1, ilk kez: konusma paneli + el isareti
+            lastMoveTime = Time.unscaledTime;   // idle ipucu sayacini sifirla
         }
 
         void ApplyReferenceVisualProfile()
@@ -1764,6 +1902,7 @@ namespace ColorCargoLoop
                 coinAmount += Mathf.Max(0, rewardedAdCoinAmount);
                 UpdateCoinUI();
                 Analytics.Event("rewarded_ad_coin");
+                AltareLog("rewarded_ad_watched", new Dictionary<string, object> { { "placement", "extra_coins" } });
             });
         }
 
@@ -1776,7 +1915,7 @@ namespace ColorCargoLoop
 
         void OnNextButtonClicked()
         {
-            LoadNextLevel();
+            WinContinue();   // coin patlama + tek geceli (WinContinue _winContinuing guard'i cift tetiklemeyi engeller)
         }
 
         // LOSE panel butonlari: BASTAN OYNA + REKLAM IZLE LEVELI GEC (atanmazsa sessiz gecer)
@@ -1797,12 +1936,286 @@ namespace ColorCargoLoop
         public void OpenShop() { if (shopPanel != null) shopPanel.SetActive(true); }
         public void CloseShop() { if (shopPanel != null) shopPanel.SetActive(false); }
 
+        // AYARLAR paneli: ac/kapa + SFX/muzik/titresim toggle + restore + gizlilik/sartlar (atanmazsa sessiz gecer)
+        void WireSettings()
+        {
+            if (settingsOpenButton != null) { settingsOpenButton.onClick.RemoveListener(OpenSettings); settingsOpenButton.onClick.AddListener(OpenSettings); }
+            if (settingsCloseButton != null) { settingsCloseButton.onClick.RemoveListener(CloseSettings); settingsCloseButton.onClick.AddListener(CloseSettings); }
+            if (sfxToggleButton != null) { sfxToggleButton.onClick.RemoveListener(OnToggleSfx); sfxToggleButton.onClick.AddListener(OnToggleSfx); }
+            if (musicToggleButton != null) { musicToggleButton.onClick.RemoveListener(OnToggleMusic); musicToggleButton.onClick.AddListener(OnToggleMusic); }
+            if (hapticsToggleButton != null) { hapticsToggleButton.onClick.RemoveListener(OnToggleHaptics); hapticsToggleButton.onClick.AddListener(OnToggleHaptics); }
+            if (restorePurchasesButton != null) { restorePurchasesButton.onClick.RemoveListener(OnRestorePurchases); restorePurchasesButton.onClick.AddListener(OnRestorePurchases); }
+            if (privacyPolicyButton != null) { privacyPolicyButton.onClick.RemoveListener(OnPrivacyPolicy); privacyPolicyButton.onClick.AddListener(OnPrivacyPolicy); }
+            if (termsButton != null) { termsButton.onClick.RemoveListener(OnTerms); termsButton.onClick.AddListener(OnTerms); }
+            EnsurePanelClickToClose();
+            RefreshSettingsIndicators();
+        }
+
+        public void OpenSettings() { if (settingsPanel != null) settingsPanel.SetActive(true); RefreshSettingsIndicators(); PlaySettingsButtonsSlideIn(); }
+        public void CloseSettings() { if (settingsPanel != null) settingsPanel.SetActive(false); }
+
+        void OnToggleSfx() { AudioManager.ToggleSfx(); AudioManager.Play(AudioManager.Sfx.Button); RefreshSettingsIndicators(); }
+        void OnToggleMusic() { AudioManager.ToggleMusic(); RefreshSettingsIndicators(); }
+        void OnToggleHaptics() { Haptic.Toggle(); if (Haptic.Enabled) Haptic.Light(0f, 24, 135); RefreshSettingsIndicators(); }
+        void OnRestorePurchases() { if (BillingManager.Instance != null) BillingManager.Instance.Restore(); }
+        void OnPrivacyPolicy() { if (!string.IsNullOrEmpty(privacyPolicyUrl)) Application.OpenURL(privacyPolicyUrl); }
+        void OnTerms() { if (!string.IsNullOrEmpty(termsUrl)) Application.OpenURL(termsUrl); }
+
+        // KAPALI gostergelerini ayarin durumuna gore guncelle (gosterge = ayar KAPALIYKEN gorunur)
+        // Ayar butonlari: ACIK = tam renk (beyaz tint), KAPALI = grimsi.
+        void RefreshSettingsIndicators()
+        {
+            ApplyToggleVisual(sfxToggleButton, AudioManager.IsSfxOn);
+            ApplyToggleVisual(musicToggleButton, AudioManager.IsMusicOn);
+            ApplyToggleVisual(hapticsToggleButton, Haptic.Enabled);
+        }
+
+        void ApplyToggleVisual(UnityEngine.UI.Button btn, bool on)
+        {
+            if (btn != null && btn.image != null) btn.image.color = on ? Color.white : settingsOffTint;
+        }
+
+        // Panele BOS ALANINA tiklayinca KAPANSIN: panel kokune gorunmez tiklanabilir Button ekler.
+        // Cocuk butonlar (toggle/restore...) kendi tiklamasini TUKETIR -> panel kapanmaz; sadece bos alan kapatir.
+        void EnsurePanelClickToClose()
+        {
+            if (settingsPanel == null) return;
+            var graphic = settingsPanel.GetComponent<UnityEngine.UI.Graphic>();
+            if (graphic == null)
+            {
+                var img = settingsPanel.AddComponent<UnityEngine.UI.Image>();
+                img.color = new Color(0f, 0f, 0f, 0f); // gorunmez ama raycast alir
+                graphic = img;
+            }
+            graphic.raycastTarget = true;
+            var btn = settingsPanel.GetComponent<UnityEngine.UI.Button>();
+            if (btn == null) btn = settingsPanel.AddComponent<UnityEngine.UI.Button>();
+            btn.transition = UnityEngine.UI.Selectable.Transition.None; // panel gorseli degismesin
+            btn.onClick.RemoveListener(CloseSettings);
+            btn.onClick.AddListener(CloseSettings);
+        }
+
+        // Ayar butonlari: panel acilinca sagdan SIRAYLA (ustten alta) kayarak yerlerine gelir.
+        void PlaySettingsButtonsSlideIn()
+        {
+            if (!settingsSlideInEnabled || !isActiveAndEnabled) return;
+            if (_settingsSlideCo != null) StopCoroutine(_settingsSlideCo);
+            _settingsSlideCo = StartCoroutine(SettingsSlideInRoutine());
+        }
+
+        void AddSettingsRect(System.Collections.Generic.List<RectTransform> list, UnityEngine.UI.Button b)
+        {
+            if (b == null) return;
+            var rt = b.transform as RectTransform;
+            if (rt != null && !list.Contains(rt)) list.Add(rt);
+        }
+
+        System.Collections.IEnumerator SettingsSlideInRoutine()
+        {
+            var list = new System.Collections.Generic.List<RectTransform>();
+            AddSettingsRect(list, sfxToggleButton);
+            AddSettingsRect(list, musicToggleButton);
+            AddSettingsRect(list, hapticsToggleButton);
+            AddSettingsRect(list, restorePurchasesButton);
+            AddSettingsRect(list, privacyPolicyButton);
+            AddSettingsRect(list, termsButton);
+            AddSettingsRect(list, settingsCloseButton);
+            if (list.Count == 0) { _settingsSlideCo = null; yield break; }
+
+            foreach (var rt in list) if (!_settingsBtnHome.ContainsKey(rt)) _settingsBtnHome[rt] = rt.anchoredPosition;
+            list.Sort((a, b) => _settingsBtnHome[b].y.CompareTo(_settingsBtnHome[a].y)); // USTTEN ALTA
+
+            Vector2 off = new Vector2(settingsSlideFromX, 0f); // ekran disi sag
+            for (int i = 0; i < list.Count; i++) list[i].anchoredPosition = _settingsBtnHome[list[i]] + off;
+
+            float dur = Mathf.Max(0.05f, settingsSlideDuration);
+            float total = (list.Count - 1) * settingsSlideStagger + dur;
+            float t = 0f;
+            while (t < total)
+            {
+                t += Time.unscaledDeltaTime;
+                for (int i = 0; i < list.Count; i++)
+                {
+                    RectTransform rt = list[i]; Vector2 home = _settingsBtnHome[rt];
+                    float e = t - i * settingsSlideStagger;
+                    float u = Mathf.Clamp01(e / dur);
+                    float s = 1f - Mathf.Pow(1f - u, 3f); // ease-out cubic (sona dogru yavaslar)
+                    rt.anchoredPosition = Vector2.LerpUnclamped(home + off, home, s);
+                }
+                yield return null;
+            }
+            foreach (var rt in list) rt.anchoredPosition = _settingsBtnHome[rt];
+            _settingsSlideCo = null;
+        }
+
+        // ================= EGITIM (TUTORIAL): sadece Level 1, bir kez =================
+        void TryStartTutorial()
+        {
+            HideHandHint();
+            bool show = tutorialEnabled && currentLevel == 1 && PlayerPrefs.GetInt(SaveKeyTutorial, 0) == 0 && tutorialMessages != null && tutorialMessages.Length > 0;
+            if (!show) { if (tutorialPanel != null) tutorialPanel.SetActive(false); tutorialActive = false; return; }
+            tutorialActive = true;
+            tutorialStep = 0;
+            inputLocked = true;                  // panel acikken oyun girdisi kilitli
+            EnsureTutorialPanelTap();
+            if (tutorialPanel != null) tutorialPanel.SetActive(true);
+            ShowTutorialStep();
+        }
+
+        void ShowTutorialStep()
+        {
+            if (tutorialText != null && tutorialMessages != null && tutorialStep >= 0 && tutorialStep < tutorialMessages.Length)
+                tutorialText.text = tutorialMessages[tutorialStep];
+        }
+
+        // Tutorial paneline (ekrana) tiklayinca: sonraki mesaj; son mesajdan sonra panel kapanir + el isareti baslar.
+        public void TutorialAdvance()
+        {
+            if (!tutorialActive) return;
+            tutorialStep++;
+            if (tutorialMessages != null && tutorialStep < tutorialMessages.Length) ShowTutorialStep();
+            else EndTutorialPanel();
+        }
+
+        void EndTutorialPanel()
+        {
+            if (tutorialPanel != null) tutorialPanel.SetActive(false);
+            inputLocked = false;                 // oyun oynanabilir
+            lastMoveTime = Time.unscaledTime;    // el hint sayaci
+            ShowHandHint();                      // el isareti (idle hint ile AYNI mekanizma)
+        }
+
+        // El: bir sepetten yana SURUKLE isareti yapar (oyuncu ilk hamleyi yapana kadar tekrarlar).
+        System.Collections.IEnumerator HandHintLoop()
+        {
+            RectTransform rt = _tutorialHandGO != null ? _tutorialHandGO.transform as RectTransform : null;
+            if (rt == null) yield break;
+            PlaceHandOverFirstTruck(rt);   // el ONCE bir sepetin ustune gider
+            Vector2 home = rt.anchoredPosition;
+            Vector3 baseScale = rt.localScale;
+            while (handHintShowing)
+            {
+                rt.anchoredPosition = home; rt.localScale = baseScale * 0.9f; // BAS
+                float e = 0f;
+                while (e < 0.85f) { e += Time.unscaledDeltaTime; float u = Mathf.Clamp01(e / 0.85f); float s = 1f - Mathf.Pow(1f - u, 3f); rt.anchoredPosition = Vector2.LerpUnclamped(home, home + tutorialHandDragOffset, s); yield return null; }
+                rt.localScale = baseScale;
+                yield return new WaitForSeconds(0.4f);
+            }
+        }
+
+        void FinishTutorial()   // tutorial'i KALICI bitir (el gizlemeyi HideHandHint yapar)
+        {
+            if (!tutorialActive) return;
+            tutorialActive = false;
+            if (tutorialPanel != null) tutorialPanel.SetActive(false);
+            PlayerPrefs.SetInt(SaveKeyTutorial, 1); PlayerPrefs.Save();  // bir daha gosterme
+        }
+
+        // Tutorial paneline (tam ekran) tiklayinca TutorialAdvance: gorunmez tiklanabilir Button ekler.
+        void EnsureTutorialPanelTap()
+        {
+            if (tutorialPanel == null) return;
+            var graphic = tutorialPanel.GetComponent<UnityEngine.UI.Graphic>();
+            if (graphic == null) { var img = tutorialPanel.AddComponent<UnityEngine.UI.Image>(); img.color = new Color(0f, 0f, 0f, 0f); graphic = img; }
+            graphic.raycastTarget = true;
+            var btn = tutorialPanel.GetComponent<UnityEngine.UI.Button>();
+            if (btn == null) btn = tutorialPanel.AddComponent<UnityEngine.UI.Button>();
+            btn.transition = UnityEngine.UI.Selectable.Transition.None;
+            btn.onClick.RemoveListener(TutorialAdvance);
+            btn.onClick.AddListener(TutorialAdvance);
+        }
+
+        // El'i ilk gecerli sepetin ustune yerlestir (dunya -> UI). El, panel kapaninca buraya gidip suruklemeyi gosterir.
+        void PlaceHandOverFirstTruck(RectTransform handRT)
+        {
+            if (handRT == null || trucks == null || trucks.Count == 0) return;
+            TruckInfo t = null;
+            foreach (var tr in trucks) if (tr != null && tr.root != null) { t = tr; break; }
+            if (t == null) return;
+            Camera cam = Camera.main; if (cam == null) cam = FindObjectOfType<Camera>();
+            RectTransform parentRT = handRT.parent as RectTransform;
+            if (cam == null || parentRT == null) return;
+            Vector3 screen = cam.WorldToScreenPoint(t.root.position);
+            Canvas canvas = handRT.GetComponentInParent<Canvas>();
+            Camera uiCam = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay) ? canvas.worldCamera : null;
+            if (RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRT, screen, uiCam, out Vector2 local))
+                handRT.anchoredPosition = local;
+        }
+
+        // El UI'ini SPRITE'tan runtime olusturur (Canvas altina). Kullanici sadece sprite atar.
+        void CreateTutorialHand()
+        {
+            if (_tutorialHandGO != null || tutorialHandSprite == null) return;
+            Canvas canvas = tutorialPanel != null ? tutorialPanel.GetComponentInParent<Canvas>() : FindObjectOfType<Canvas>();
+            if (canvas == null) return;
+            _tutorialHandGO = new GameObject("[TutorialHand]");
+            _tutorialHandGO.transform.SetParent(canvas.transform, false);
+            var img = _tutorialHandGO.AddComponent<UnityEngine.UI.Image>();
+            img.sprite = tutorialHandSprite;
+            img.raycastTarget = false;       // tiklamayi engellemesin
+            img.preserveAspect = true;
+            img.rectTransform.sizeDelta = new Vector2(Mathf.Max(16f, tutorialHandSize), Mathf.Max(16f, tutorialHandSize));
+            _tutorialHandGO.transform.SetAsLastSibling(); // en ustte gorunsun
+        }
+
+        void DestroyTutorialHand()
+        {
+            if (_tutorialHandGO != null) { Destroy(_tutorialHandGO); _tutorialHandGO = null; }
+        }
+
+        // El ipucunu goster (hem tutorial sonrasi hem IDLE durumunda). Tek mekanizma.
+        void ShowHandHint()
+        {
+            if (handHintShowing || tutorialHandSprite == null) return;
+            CreateTutorialHand();
+            if (_tutorialHandGO == null) return;
+            handHintShowing = true;
+            if (tutorialHandCo != null) StopCoroutine(tutorialHandCo);
+            tutorialHandCo = StartCoroutine(HandHintLoop());
+        }
+
+        void HideHandHint()
+        {
+            handHintShowing = false;
+            if (tutorialHandCo != null) { StopCoroutine(tutorialHandCo); tutorialHandCo = null; }
+            DestroyTutorialHand();
+        }
+
+        // Oyuncu hamle yapinca: idle sayacini sifirla, el'i gizle, (varsa) tutorial'i kalici bitir.
+        void OnPlayerMoved()
+        {
+            lastMoveTime = Time.unscaledTime;
+            if (handHintShowing) HideHandHint();
+            if (tutorialActive) FinishTutorial();
+        }
+
+        // Panel (win/lose/ayarlar/shop/booster) acikken arka plan muzigini DURDUR, hepsi kapaninca DEVAM.
+        bool _panelMusicSuspended;
+        void UpdatePanelMusic()
+        {
+            bool anyPanel =
+                (winPanel != null && winPanel.activeInHierarchy) ||
+                (losePanel != null && losePanel.activeInHierarchy) ||
+                (settingsPanel != null && settingsPanel.activeInHierarchy) ||
+                (shopPanel != null && shopPanel.activeInHierarchy) ||
+                (boosterShopPanel != null && boosterShopPanel.activeInHierarchy);
+            if (anyPanel != _panelMusicSuspended)
+            {
+                _panelMusicSuspended = anyPanel;
+                AudioManager.SetMusicSuspended(anyPanel);
+            }
+        }
+
+        // Altare AI SDK: event'i Altare paneline gonderir (SDK consent ile otomatik baslar; init yoksa sessizce dusulur)
+        static void AltareLog(string ev, Dictionary<string, object> p = null) => Altare.Analytics.AltareAnalytics.LogEvent(ev, p);
+
         void OnLoseSkipAd()
         {
             EnsureAdsManager().ShowRewarded(granted =>
             {
                 if (!granted) return;                 // reklam izlenmediyse panel acik kalir
                 Analytics.Event("rewarded_ad_skip_level");
+                AltareLog("rewarded_ad_watched", new Dictionary<string, object> { { "placement", "skip_level" } });
                 LoadNextLevel();                      // reklam izlendi -> leveli GEC
             });
         }
@@ -1856,10 +2269,10 @@ namespace ColorCargoLoop
             if (activeLevel == null) return;
             string lv = "[Level " + currentLevel + " dogrulama] ";
 
-            // 1) Renk dengesi: potre ihtiyaci vs ayni renk sepet kapasitesi toplami (fazla sepetler dolgu/hamle sepetidir, sorun degil)
+            // 1) RENK DENGESI (ONARIMLI): potrenin her renginde, GRID USTUNDEKI (gecerli/spawn olacak) sepetlerin
+            //    toplam kapasitesi >= o rengin kup sayisi olmali. Yetmiyorsa ONARILIR -> level cozulebilir kalir.
             int[] need = ArrowsPixelLevelLibrary.CountPortraitColors(activeLevel.portraitRows);
-            int[] have = new int[6];
-            int truckCount = 0;
+            var valid = new List<ArrowsPixelTruckSpawn>();
             if (activeLevel.trucks != null)
             {
                 foreach (var tr in activeLevel.trucks)
@@ -1870,14 +2283,37 @@ namespace ColorCargoLoop
                         Debug.LogWarning(lv + "sepet grid disinda/maskeli hucrede: (" + tr.x + "," + tr.z + ") - spawn atlanir");
                         continue;
                     }
-                    truckCount++;
-                    for (int i = 0; i < 6; i++)
-                        if (ArrowsPixelLevelLibrary.IndexToCargo(i) == tr.color) { have[i] += Mathf.Max(1, tr.capacity); break; }
+                    valid.Add(tr);
                 }
             }
-            for (int i = 0; i < 6; i++)
-                if (need[i] > 0 && have[i] < need[i])
-                    Debug.LogWarning(lv + ArrowsPixelLevelLibrary.IndexToCargo(i) + " kapasitesi yetersiz: potre " + need[i] + " kup istiyor, sepetlerde " + have[i] + " var");
+            int truckCount = valid.Count;
+
+            int IdxOf(CargoColor c) { for (int i = 0; i < ArrowsPixelLevelLibrary.PaletteSize; i++) if (ArrowsPixelLevelLibrary.IndexToCargo(i) == c) return i; return 0; }
+            int CountColor(CargoColor c) { int cn = 0; foreach (var tr in valid) if (tr.color == c) cn++; return cn; }
+
+            // A) EKSIK RENK: ihtiyac olan ama hic (gecerli) sepeti olmayan renge, "engel/fazla" bir sepeti BOYAYARAK sepet ver
+            for (int i = 0; i < ArrowsPixelLevelLibrary.PaletteSize; i++)
+            {
+                if (need[i] <= 0) continue;
+                CargoColor want = ArrowsPixelLevelLibrary.IndexToCargo(i);
+                if (CountColor(want) > 0) continue;
+                ArrowsPixelTruckSpawn donor = null;
+                foreach (var tr in valid) { if (tr.color == CargoColor.Obstacle) { donor = tr; break; } } // ENGEL sepet = ideal donor
+                if (donor == null) foreach (var tr in valid) { if (need[IdxOf(tr.color)] <= 0) { donor = tr; break; } }
+                if (donor == null) foreach (var tr in valid) { if (CountColor(tr.color) > 1) { donor = tr; break; } } // yoksa fazlasi olan renkten
+                if (donor != null) { donor.color = want; Debug.Log(lv + "ONARIM: bir sepet " + want + " yapildi (eksik renk)"); }
+                else Debug.LogWarning(lv + want + " icin sepet yok ve donor yok (sepet sayisi renk sayisindan az)");
+            }
+
+            // B) KAPASITE: her renkte toplam (gecerli) kapasite >= ihtiyac; eksigi ilk sepete ekle
+            for (int i = 0; i < ArrowsPixelLevelLibrary.PaletteSize; i++)
+            {
+                if (need[i] <= 0) continue;
+                CargoColor want = ArrowsPixelLevelLibrary.IndexToCargo(i);
+                int cap = 0; ArrowsPixelTruckSpawn firstT = null;
+                foreach (var tr in valid) { if (tr.color == want) { cap += Mathf.Max(1, tr.capacity); if (firstT == null) firstT = tr; } }
+                if (firstT != null && cap < need[i]) { firstT.capacity += (need[i] - cap); Debug.Log(lv + "ONARIM: " + want + " kapasitesi " + cap + " -> " + need[i]); }
+            }
 
             // 2) En az 1 bos hucre olmali ki kaydirma hamlesi yapilabilsin
             int cellCount = 0;
@@ -2104,6 +2540,16 @@ namespace ColorCargoLoop
             int rows = pic.Length;
             int cols = 0;
             for (int i = 0; i < rows; i++) if (!string.IsNullOrEmpty(pic[i])) cols = Mathf.Max(cols, pic[i].Length);
+
+            // ORAN SABIT: cozunurluk (hucre sayisi) artsa bile portre ESKI 32-hucre boyutunda gorunsun.
+            // 48 hucre olsa da kup boyutu kuculur -> board/portre orani bozulmaz, sadece daha ince/detayli olur.
+            const int refCells = 32;
+            int maxCells = Mathf.Max(cols, rows);
+            if (maxCells > refCells)
+            {
+                float k = (float)refCells / maxCells;
+                stepX *= k; stepZ *= k; tileScale *= k;
+            }
 
             // Atanmis pictureArea varsa kup-resim oraya kurulur (pozisyon+rotasyon ondan);
             // yoksa eski sabit konum (Pixel Flow gibi zemine oturur).
@@ -2406,6 +2852,34 @@ namespace ColorCargoLoop
                     TryWallCorner(parent, gx, gz, -1, 1, t, wh, wy);
                     TryWallCorner(parent, gx, gz, -1, -1, t, wh, wy);
                 }
+        }
+
+        // Board duvar segmentlerini (Wall_/WallCorner_) toplayip MEKSIKA DALGASI animasyonunu kurar.
+        void SetupBoardWallWave()
+        {
+            if (!boardWallWaveEnabled || root == null) return;
+            var segs = new List<Transform>();
+            CollectWallSegments(root, segs);
+            if (segs.Count < 3) return;
+            // cevre sirasi: board merkezine gore ACIYA gore sirala -> dalga duzgun dolasir
+            Vector3 ctr = Vector3.zero; foreach (var s in segs) ctr += s.position; ctr /= segs.Count;
+            segs.Sort((a, b) => Mathf.Atan2(a.position.z - ctr.z, a.position.x - ctr.x)
+                                .CompareTo(Mathf.Atan2(b.position.z - ctr.z, b.position.x - ctr.x)));
+            var wave = root.gameObject.AddComponent<BoardWallWave>();
+            wave.amplitude = boardWallWaveAmplitude;
+            wave.waveSpeed = boardWallWaveSpeed;
+            wave.waveWidth = boardWallWaveWidth;
+            wave.pauseBetween = boardWallWavePause;
+            wave.Setup(segs);
+        }
+
+        void CollectWallSegments(Transform parent, List<Transform> outList)
+        {
+            foreach (Transform c in parent)
+            {
+                if (c.name.StartsWith("Wall_") || c.name.StartsWith("WallCorner_")) outList.Add(c);
+                CollectWallSegments(c, outList);
+            }
         }
 
         // Hucre var mi? Sinir + opsiyonel cellMask (T/L formlar). Maske satirlari USTTEN alta yazilir.
@@ -3418,7 +3892,12 @@ namespace ColorCargoLoop
         void Update()
         {
             AnimatePortraitRoad();   // konveyor surekli aksin
+            UpdatePanelMusic();      // panel acikken arka plan muzigi sus
             if (gstate != GameState.Playing || trucks.Count == 0) return;
+            // IDLE IPUCU: bir sure hamle yapilmazsa el tekrar gorunsun (her level)
+            if (idleHintDelay > 0f && currentLevel <= idleHintMaxLevel && !handHintShowing && !tutorialActive && !inputLocked && tutorialHandSprite != null
+                && Time.unscaledTime - lastMoveTime > idleHintDelay)
+                ShowHandHint();
             Vector3 sp;
             if (!inputLocked && dragTruck == null && PointerDown(out sp))
             {
@@ -3519,6 +3998,7 @@ namespace ColorCargoLoop
                 t.exitDir = ExitDirectionVector(exitGate.direction);
                 moveCount++;
                 UpdateMoveUI();
+                OnPlayerMoved();   // idle sayac sifirla + el gizle + tutorial bitir
                 StartCoroutine(ExtractRoutine(t, free));
                 return;
             }
@@ -3535,6 +4015,7 @@ namespace ColorCargoLoop
             t.gz = targetZ;
             moveCount++;
             UpdateMoveUI();
+            OnPlayerMoved();   // idle sayac sifirla + el gizle + tutorial bitir
 
             Vector3 dir = new Vector3(dx, 0f, dz);
             t.headDir = dir.normalized;
@@ -3974,6 +4455,7 @@ namespace ColorCargoLoop
                 coinAmount += Mathf.Max(0, coinPerLevel); // her level tamamlaninca +50 coin (win odulu)
                 UpdateCoinUI();
                 Analytics.LevelWin(currentLevel, moveCount);
+                AltareLog("level_complete", new Dictionary<string, object> { { "level", currentLevel }, { "moves_used", moveCount } });
                 ShowEndPanel(winPanel, true);
                 return;
             }
@@ -3982,6 +4464,7 @@ namespace ColorCargoLoop
                 gstate = GameState.Lost;
                 inputLocked = true;
                 Analytics.LevelLose(currentLevel, moveCount);
+                AltareLog("level_fail", new Dictionary<string, object> { { "level", currentLevel }, { "moves_used", moveCount } });
                 ShowEndPanel(losePanel, false);
             }
         }
@@ -4009,6 +4492,71 @@ namespace ColorCargoLoop
         {
             yield return new WaitForSeconds(0.55f);
             LoadNextLevel();
+        }
+
+        // === WIN PANEL: "Devam et" butonu -> coin sesi + coin patlamasi + sonraki level ===
+        // Buton OnClick'i BU metoda bagla (eski LoadNextLevel baglamasini KALDIR).
+        public void WinContinue()
+        {
+            if (_winContinuing) return;
+            _winContinuing = true;
+            SpawnCoinBurst();
+            StartCoroutine(WinContinueRoutine());
+        }
+
+        System.Collections.IEnumerator WinContinueRoutine()
+        {
+            yield return new WaitForSecondsRealtime(Mathf.Max(0f, winContinueDelay));
+            _winContinuing = false;
+            LoadNextLevel();
+        }
+
+        // Bir kac coin sprite'ini panelde sacar + coin sesi calar. Tek basina da cagirilabilir.
+        public void SpawnCoinBurst()
+        {
+            if (coinBurstSound != null) AudioManager.PlayClip(coinBurstSound);
+            if (coinBurstSprite == null) return;
+            Canvas canvas = winPanel != null ? winPanel.GetComponentInParent<Canvas>() : FindObjectOfType<Canvas>();
+            if (canvas == null) return;
+            RectTransform canvasRT = canvas.transform as RectTransform;
+            if (canvasRT == null) return;
+            Vector2 startLocal = Vector2.zero;
+            Transform refT = coinBurstAnchor != null ? (Transform)coinBurstAnchor : (winPanel != null ? winPanel.transform : null);
+            if (refT != null) startLocal = canvasRT.InverseTransformPoint(refT.position);
+            int count = Mathf.Max(1, coinBurstCount);
+            for (int i = 0; i < count; i++) StartCoroutine(CoinBurstPiece(canvasRT, startLocal));
+        }
+
+        System.Collections.IEnumerator CoinBurstPiece(RectTransform parent, Vector2 startLocal)
+        {
+            if (parent == null) yield break;
+            var go = new GameObject("[CoinBurst]");
+            go.transform.SetParent(parent, false);
+            var img = go.AddComponent<UnityEngine.UI.Image>();
+            img.sprite = coinBurstSprite;
+            img.raycastTarget = false;
+            img.preserveAspect = true;
+            RectTransform rt = img.rectTransform;
+            rt.sizeDelta = new Vector2(coinBurstSize, coinBurstSize);
+            rt.anchoredPosition = startLocal;
+            go.transform.SetAsLastSibling();
+            Vector2 vel = new Vector2(UnityEngine.Random.Range(-280f, 280f), UnityEngine.Random.Range(360f, 620f));
+            const float grav = -1500f;
+            float life = UnityEngine.Random.Range(0.75f, 1.0f);
+            float rotSpeed = UnityEngine.Random.Range(-540f, 540f);
+            rt.localScale = Vector3.one * UnityEngine.Random.Range(0.8f, 1.15f);
+            float t = 0f;
+            while (t < life)
+            {
+                float dt = Time.unscaledDeltaTime;
+                t += dt;
+                vel.y += grav * dt;
+                rt.anchoredPosition += vel * dt;
+                rt.Rotate(0f, 0f, rotSpeed * dt);
+                if (t > life * 0.55f) { var c = img.color; c.a = Mathf.Clamp01(1f - (t - life * 0.55f) / (life * 0.45f)); img.color = c; }
+                yield return null;
+            }
+            Destroy(go);
         }
 
         System.Collections.IEnumerator RestartAfterDelay()
