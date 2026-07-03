@@ -162,13 +162,72 @@ namespace ColorCargoLoop
         }
 
         // ============================================================
-        // ADAPTIVE: gorselin KENDI ~12 baskin rengini cikarir (median-cut) ve hucreleri ONA quantize eder.
+        // ADAPTIVE: gorselin KENDI ~12 baskin rengini cikarir (median-cut + k-means) ve hucreleri ONA quantize eder.
         // Donen rows char'lari slot 0..11; gercek renkler 'palette' ile gelir (runtime CargoColorPalette.Override).
+        // YOGUN AI gorselleri (diamond-art vb.) icin: yukseklik 64'e kadar, arka plan temizleme OPSIYONEL.
         // ============================================================
         const int PaletteCount = 12;
         static readonly char[] SlotChars = { 'P', 'B', 'Y', 'G', 'U', 'O', 'K', 'C', 'T', 'L', 'W', 'N' };
 
-        static string[] ConvertTextureAdaptive(string path, out Color[] palette)
+        // HD import ayarlari (PortraitImporterHdWindow yazar)
+        public static int HdTargetHeight = 48;
+        public static int HdColorCount = 12;
+        public static bool HdRemoveBackground = false; // tam-sahne AI resimlerinde KAPALI kalsin (gokyuzu/zemin resmin parcasi)
+        public static float HdVivid = 0.15f;           // 0 = renklere dokunma, 1 = agresif canlandirma
+
+        [MenuItem("Color Cargo Loop/Import Portraits HD (Adaptive - resmin kendi renkleri)")]
+        public static void ImportAllAdaptive()
+        {
+            if (!Directory.Exists(PortraitFolder))
+            {
+                Directory.CreateDirectory(PortraitFolder);
+                AssetDatabase.Refresh();
+                Debug.LogWarning("Portre klasoru olusturuldu: " + PortraitFolder + " -> AI gorsellerini (PNG) buraya koy, menuyu tekrar calistir.");
+                return;
+            }
+
+            var set = AssetDatabase.LoadAssetAtPath<ArrowsPixelPortraitSet>(SetPath);
+            if (set == null)
+            {
+                set = ScriptableObject.CreateInstance<ArrowsPixelPortraitSet>();
+                AssetDatabase.CreateAsset(set, SetPath);
+            }
+            set.portraits.Clear();
+
+            string[] guids = AssetDatabase.FindAssets("t:Texture2D", new[] { PortraitFolder });
+            int n = 0; int maxCells = 0; var report = new StringBuilder();
+            foreach (var guid in guids)
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                string lower = path.ToLower();
+                if (!lower.EndsWith(".png") && !lower.EndsWith(".jpg") && !lower.EndsWith(".jpeg")) continue;
+                if (Path.GetFileName(path).StartsWith("sample_")) continue;
+                Color[] palette;
+                string[] rows = ConvertTextureAdaptive(path, HdTargetHeight, HdColorCount, HdRemoveBackground, HdVivid, out palette);
+                if (rows == null) continue;
+                if (FullScene) rows = ApplyFullScene(rows, n); // sadece saydam hucre varsa dolgu yapar
+                int cells = 0; foreach (var r in rows) foreach (var c in r) if (c != '.') cells++;
+                if (cells > maxCells) maxCells = cells;
+                set.portraits.Add(new ArrowsPixelPortraitSet.Entry
+                {
+                    name = Path.GetFileNameWithoutExtension(path),
+                    rows = rows,
+                    palette = palette, // runtime CargoColorPalette.Override bunu basar -> kupler resmin GERCEK renginde
+                    preview = string.Join("\n", rows) + "\n[HD adaptive: " + (palette != null ? palette.Length : 0) + " renk, " + cells + " kup]"
+                });
+                report.AppendLine(Path.GetFileName(path) + " -> " + rows[0].Length + "x" + rows.Length + " grid, " + cells + " kup, " + (palette != null ? palette.Length : 0) + " renk");
+                n++;
+            }
+
+            EditorUtility.SetDirty(set);
+            AssetDatabase.SaveAssets();
+            AssetDatabase.Refresh();
+            Debug.Log("HD ADAPTIVE potre importu bitti: " + n + " gorsel -> " + SetPath + "\n" + report
+                + (maxCells > 3200 ? "\nUYARI: " + maxCells + " kup tek portrede COK YOGUN - mobilde FPS'i test et (48 yukseklik ~2300 kup onerilir)." : ""));
+            Selection.activeObject = set;
+        }
+
+        static string[] ConvertTextureAdaptive(string path, int targetHeight, int colorCount, bool removeBg, float vivid, out Color[] palette)
         {
             palette = null;
             var importer = AssetImporter.GetAtPath(path) as TextureImporter;
@@ -186,9 +245,9 @@ namespace ColorCargoLoop
             var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
             if (tex == null) return null;
             int sw = tex.width, sh = tex.height;
-            int th = Mathf.Clamp(TargetHeight, 8, 48);
+            int th = Mathf.Clamp(targetHeight, 8, 64);
             int tw = Mathf.Max(4, Mathf.RoundToInt((float)sw / sh * th));
-            tw = Mathf.Min(tw, th);
+            tw = Mathf.Min(tw, Mathf.RoundToInt(th * 1.1f)); // kare serbest; asiri yatay tasmasin
             Color[] src = tex.GetPixels();
 
             // 1) her hucre rengi: box-filter + hafif canlandirma
@@ -206,40 +265,45 @@ namespace ColorCargoLoop
                     if (cnt > 0) { ar /= cnt; ag /= cnt; ab /= cnt; aa /= cnt; }
                     if (aa < AlphaThreshold) { solid[ry, rx] = false; continue; }
                     float hh, ss, vv; Color.RGBToHSV(new Color(ar, ag, ab), out hh, out ss, out vv);
-                    ss = Mathf.Clamp01(ss * 1.30f + 0.03f); vv = Mathf.Clamp01((vv - 0.5f) * 1.10f + 0.5f);
+                    ss = Mathf.Clamp01(ss * (1f + 0.9f * vivid) + 0.04f * vivid);            // canlandirma dozu ayarli
+                    vv = Mathf.Clamp01((vv - 0.5f) * (1f + 0.35f * vivid) + 0.5f);
                     cell[ry, rx] = Color.HSVToRGB(hh, ss, vv); solid[ry, rx] = true;
                 }
 
-            // 1b) ARKA PLAN TEMIZLE: kenarlardan flood-fill, KOSE rengine (bg) yakin hucreleri BOS yap.
-            //     -> beyaz/duz zemin potre arkasiyla karismaz; ozne korunur (icteki beyaz silinmez cunku kenara bagli degil).
-            Color bg = new Color(0, 0, 0); int bgn = 0;
-            int[][] corners = { new[] { 0, 0 }, new[] { 0, tw - 1 }, new[] { th - 1, 0 }, new[] { th - 1, tw - 1 } };
-            foreach (var co in corners) if (solid[co[0], co[1]]) { bg += cell[co[0], co[1]]; bgn++; }
-            if (bgn > 0)
+            // 1b) ARKA PLAN TEMIZLE (OPSIYONEL): kenarlardan flood-fill, KOSE rengine (bg) yakin hucreleri BOS yap.
+            //     Tam-sahne AI resimlerinde KAPALI olmali (gokyuzu/zemin resmin parcasi, silinmemeli).
+            if (removeBg)
             {
-                bg /= bgn;
-                float bgT2 = 0.17f * 0.17f;
-                bool[,] isBg = new bool[th, tw];
-                var q = new System.Collections.Generic.Queue<int>();
-                System.Action<int, int> seed = (ry, rx) =>
+                Color bg = new Color(0, 0, 0); int bgn = 0;
+                int[][] corners = { new[] { 0, 0 }, new[] { 0, tw - 1 }, new[] { th - 1, 0 }, new[] { th - 1, tw - 1 } };
+                foreach (var co in corners) if (solid[co[0], co[1]]) { bg += cell[co[0], co[1]]; bgn++; }
+                if (bgn > 0)
                 {
-                    if (ry < 0 || ry >= th || rx < 0 || rx >= tw || !solid[ry, rx] || isBg[ry, rx]) return;
-                    float dr = cell[ry, rx].r - bg.r, dg = cell[ry, rx].g - bg.g, db = cell[ry, rx].b - bg.b;
-                    if (dr * dr + dg * dg + db * db <= bgT2) { isBg[ry, rx] = true; q.Enqueue(ry * tw + rx); }
-                };
-                for (int rx = 0; rx < tw; rx++) { seed(0, rx); seed(th - 1, rx); }
-                for (int ry = 0; ry < th; ry++) { seed(ry, 0); seed(ry, tw - 1); }
-                while (q.Count > 0) { int ix = q.Dequeue(); int ry = ix / tw, rx = ix % tw; seed(ry - 1, rx); seed(ry + 1, rx); seed(ry, rx - 1); seed(ry, rx + 1); }
-                for (int ry = 0; ry < th; ry++) for (int rx = 0; rx < tw; rx++) if (isBg[ry, rx]) solid[ry, rx] = false;
+                    bg /= bgn;
+                    float bgT2 = 0.17f * 0.17f;
+                    bool[,] isBg = new bool[th, tw];
+                    var q = new System.Collections.Generic.Queue<int>();
+                    System.Action<int, int> seed = (ry, rx) =>
+                    {
+                        if (ry < 0 || ry >= th || rx < 0 || rx >= tw || !solid[ry, rx] || isBg[ry, rx]) return;
+                        float dr = cell[ry, rx].r - bg.r, dg = cell[ry, rx].g - bg.g, db = cell[ry, rx].b - bg.b;
+                        if (dr * dr + dg * dg + db * db <= bgT2) { isBg[ry, rx] = true; q.Enqueue(ry * tw + rx); }
+                    };
+                    for (int rx = 0; rx < tw; rx++) { seed(0, rx); seed(th - 1, rx); }
+                    for (int ry = 0; ry < th; ry++) { seed(ry, 0); seed(ry, tw - 1); }
+                    while (q.Count > 0) { int ix = q.Dequeue(); int ry = ix / tw, rx = ix % tw; seed(ry - 1, rx); seed(ry + 1, rx); seed(ry, rx - 1); seed(ry, rx + 1); }
+                    for (int ry = 0; ry < th; ry++) for (int rx = 0; rx < tw; rx++) if (isBg[ry, rx]) solid[ry, rx] = false;
+                }
             }
 
-            // 2) palette: KALAN (ozne) hucrelerden median-cut
+            // 2) palette: KALAN (ozne) hucrelerden median-cut + k-means rafine (yogun resimde tonlar daha isabetli)
             var sample = new System.Collections.Generic.List<Color>(th * tw);
             for (int ry = 0; ry < th; ry++) for (int rx = 0; rx < tw; rx++) if (solid[ry, rx]) sample.Add(cell[ry, rx]);
-            palette = MedianCut(sample, PaletteCount);
+            palette = MedianCut(sample, Mathf.Clamp(colorCount, 2, SlotChars.Length));
             if (palette == null || palette.Length == 0) palette = new[] { Color.gray };
+            KMeansRefine(sample, palette, 4);
 
-            // 3) her hucreyi cikarilan palette'e EN YAKIN slot'a esle
+            // 3) her hucreyi cikarilan palette'e EN YAKIN slot'a esle (algisal agirlikli mesafe)
             string[] rows = new string[th];
             var sb = new StringBuilder();
             for (int ry = 0; ry < th; ry++)
@@ -251,14 +315,41 @@ namespace ColorCargoLoop
                     int best = 0; float bd = float.MaxValue;
                     for (int p = 0; p < palette.Length; p++)
                     {
-                        float dr = cell[ry, rx].r - palette[p].r, dg = cell[ry, rx].g - palette[p].g, db = cell[ry, rx].b - palette[p].b;
-                        float d = dr * dr + dg * dg + db * db; if (d < bd) { bd = d; best = p; }
+                        float d = ColorDist(cell[ry, rx], palette[p]);
+                        if (d < bd) { bd = d; best = p; }
                     }
                     sb.Append(best < SlotChars.Length ? SlotChars[best] : 'P');
                 }
                 rows[ry] = sb.ToString();
             }
             return rows;
+        }
+
+        // Algisal agirlikli renk uzakligi (goz yesile duyarli): quantize hatalari daha az goze batar
+        static float ColorDist(Color a, Color b)
+        {
+            float dr = a.r - b.r, dg = a.g - b.g, db = a.b - b.b;
+            return 0.30f * dr * dr + 0.59f * dg * dg + 0.11f * db * db;
+        }
+
+        // K-means rafine: median-cut paletini hucre orneklerine gore 'iter' tur oturtur (bos kume eski merkezini korur)
+        static void KMeansRefine(System.Collections.Generic.List<Color> samples, Color[] pal, int iters)
+        {
+            if (samples == null || samples.Count == 0 || pal == null || pal.Length == 0) return;
+            int k = pal.Length;
+            var sumR = new float[k]; var sumG = new float[k]; var sumB = new float[k]; var cnt = new int[k];
+            for (int it = 0; it < iters; it++)
+            {
+                for (int i = 0; i < k; i++) { sumR[i] = sumG[i] = sumB[i] = 0f; cnt[i] = 0; }
+                foreach (var s in samples)
+                {
+                    int best = 0; float bd = float.MaxValue;
+                    for (int p = 0; p < k; p++) { float d = ColorDist(s, pal[p]); if (d < bd) { bd = d; best = p; } }
+                    sumR[best] += s.r; sumG[best] += s.g; sumB[best] += s.b; cnt[best]++;
+                }
+                for (int i = 0; i < k; i++)
+                    if (cnt[i] > 0) pal[i] = new Color(sumR[i] / cnt[i], sumG[i] / cnt[i], sumB[i] / cnt[i], 1f);
+            }
         }
 
         static Color[] MedianCut(System.Collections.Generic.List<Color> colors, int count)
@@ -293,6 +384,40 @@ namespace ColorCargoLoop
                 int n = Mathf.Max(1, boxes[i].Count); pal[i] = new Color(r / n, g / n, b / n, 1f);
             }
             return pal;
+        }
+
+        // ============================================================
+        // HD IMPORT AYAR PENCERESI: yogunluk + renk sayisi + canlandirma + arka plan
+        // Menu: Color Cargo Loop / Portrait Importer HD (Ayarli)...
+        // ============================================================
+        sealed class PortraitImporterHdWindow : EditorWindow
+        {
+            [MenuItem("Color Cargo Loop/Portrait Importer HD (Ayarli)...")]
+            static void Open()
+            {
+                var w = GetWindow<PortraitImporterHdWindow>(true, "Portre HD Import", true);
+                w.minSize = new Vector2(380, 260);
+            }
+
+            void OnGUI()
+            {
+                EditorGUILayout.HelpBox("AI gorsellerini (PNG/JPG) su klasore koy:\n" + PortraitFolder +
+                    "\nImport her calistiginda PortraitSet.asset bastan yazilir.", MessageType.Info);
+
+                HdTargetHeight = EditorGUILayout.IntSlider(new GUIContent("Yukseklik (hucre)", "Portre kac satir olsun. 48 = ~2300 kup (onerilen), 64 = ~4100 kup (AGIR, mobilde test et)"), HdTargetHeight, 24, 64);
+                int estimate = Mathf.RoundToInt(HdTargetHeight * HdTargetHeight * 1.0f);
+                EditorGUILayout.LabelField(" ", "~" + estimate + " kup / kare resim", EditorStyles.miniLabel);
+                HdColorCount = EditorGUILayout.IntSlider(new GUIContent("Renk sayisi", "Resimden kac baskin renk cikarilsin (= oyundaki panda renk grubu sayisi). Max 12."), HdColorCount, 6, 12);
+                HdVivid = EditorGUILayout.Slider(new GUIContent("Canlandirma", "0 = resmin renklerine dokunma, 1 = doygunluk/kontrast agresif artir"), HdVivid, 0f, 1f);
+                HdRemoveBackground = EditorGUILayout.Toggle(new GUIContent("Arka plani temizle", "Saydam olmayan duz zemini silmeye calisir (kenar flood-fill). Tam-sahne AI resimlerinde KAPALI birak!"), HdRemoveBackground);
+
+                EditorGUILayout.Space(8);
+                if (GUILayout.Button("IMPORT (HD Adaptive)", GUILayout.Height(34)))
+                {
+                    ImportAllAdaptive();
+                }
+                EditorGUILayout.HelpBox("Sonuc Console'a yazilir. PortraitSet.asset zaten ArrowsPixelGame'e ataliysa ekstra bir sey yapmana gerek yok.", MessageType.None);
+            }
         }
 
         // --- 8 farkli dikey pixel-art PNG uretir (kalp/ay/yildiz/kedi/balik/hayalet/cicek/mantar).
