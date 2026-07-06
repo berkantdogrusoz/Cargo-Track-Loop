@@ -17,6 +17,7 @@ namespace ColorCargoLoop
             public string name;
             public string[] rows;                         // potre satirlari (her char bir renk; '.' = bos)
             public Color[] palette;                       // ADAPTIVE: bu gorselin KENDI renkleri (slot 0..11). Bos -> sabit candy palet.
+            public Texture2D sourceTexture;                 // Win panelde PNG neyse onu gostermek icin orijinal kaynak.
             [TextArea(4, 40)] public string preview;      // okunabilir onizleme (importer doldurur, salt-bilgi)
         }
 

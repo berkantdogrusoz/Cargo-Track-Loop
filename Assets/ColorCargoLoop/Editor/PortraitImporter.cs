@@ -100,7 +100,7 @@ namespace ColorCargoLoop
                     importer.textureCompression = TextureImporterCompression.Uncompressed;
                     importer.npotScale = TextureImporterNPOTScale.None;
                     importer.mipmapEnabled = false;
-                    importer.filterMode = FilterMode.Point;
+                    importer.filterMode = FilterMode.Bilinear;
                     importer.maxTextureSize = 2048;
                     importer.SaveAndReimport();
                 }
@@ -170,10 +170,10 @@ namespace ColorCargoLoop
         static readonly char[] SlotChars = { 'P', 'B', 'Y', 'G', 'U', 'O', 'K', 'C', 'T', 'L', 'W', 'N' };
 
         // HD import ayarlari (PortraitImporterHdWindow yazar)
-        public static int HdTargetHeight = 48;
+        public static int HdTargetHeight = 64;
         public static int HdColorCount = 12;
         public static bool HdRemoveBackground = false; // tam-sahne AI resimlerinde KAPALI kalsin (gokyuzu/zemin resmin parcasi)
-        public static float HdVivid = 0.15f;           // 0 = renklere dokunma, 1 = agresif canlandirma
+        public static float HdVivid = 0f;           // 0 = renklere dokunma, 1 = agresif canlandirma
 
         [MenuItem("Color Cargo Loop/Import Portraits HD (Adaptive - resmin kendi renkleri)")]
         public static void ImportAllAdaptive()
@@ -213,6 +213,7 @@ namespace ColorCargoLoop
                     name = Path.GetFileNameWithoutExtension(path),
                     rows = rows,
                     palette = palette, // runtime CargoColorPalette.Override bunu basar -> kupler resmin GERCEK renginde
+                    sourceTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(path),
                     preview = string.Join("\n", rows) + "\n[HD adaptive: " + (palette != null ? palette.Length : 0) + " renk, " + cells + " kup]"
                 });
                 report.AppendLine(Path.GetFileName(path) + " -> " + rows[0].Length + "x" + rows.Length + " grid, " + cells + " kup, " + (palette != null ? palette.Length : 0) + " renk");
@@ -234,12 +235,12 @@ namespace ColorCargoLoop
             if (importer != null)
             {
                 bool need = !importer.isReadable || importer.textureCompression != TextureImporterCompression.Uncompressed
-                    || importer.npotScale != TextureImporterNPOTScale.None || importer.mipmapEnabled || importer.maxTextureSize < 2048;
+                    || importer.npotScale != TextureImporterNPOTScale.None || importer.mipmapEnabled || importer.maxTextureSize < 2048 || importer.filterMode != FilterMode.Bilinear;
                 if (need)
                 {
                     importer.isReadable = true; importer.textureCompression = TextureImporterCompression.Uncompressed;
                     importer.npotScale = TextureImporterNPOTScale.None; importer.mipmapEnabled = false;
-                    importer.filterMode = FilterMode.Point; importer.maxTextureSize = 2048; importer.SaveAndReimport();
+                    importer.filterMode = FilterMode.Bilinear; importer.maxTextureSize = 2048; importer.SaveAndReimport();
                 }
             }
             var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
@@ -260,11 +261,10 @@ namespace ColorCargoLoop
                     int sx1 = Mathf.Clamp(Mathf.CeilToInt((float)(rx + 1) / tw * sw), sx0 + 1, sw);
                     int sy0 = Mathf.Clamp(Mathf.FloorToInt((float)(th - 1 - ry) / th * sh), 0, sh - 1);
                     int sy1 = Mathf.Clamp(Mathf.CeilToInt((float)(th - ry) / th * sh), sy0 + 1, sh);
-                    float ar = 0, ag = 0, ab = 0, aa = 0; int cnt = 0;
-                    for (int yy = sy0; yy < sy1; yy++) for (int xx = sx0; xx < sx1; xx++) { Color c = src[yy * sw + xx]; ar += c.r; ag += c.g; ab += c.b; aa += c.a; cnt++; }
-                    if (cnt > 0) { ar /= cnt; ag /= cnt; ab /= cnt; aa /= cnt; }
+                    float aa;
+                    Color sampled = SampleCellColorPreserveDetail(src, sw, sx0, sx1, sy0, sy1, out aa);
                     if (aa < AlphaThreshold) { solid[ry, rx] = false; continue; }
-                    float hh, ss, vv; Color.RGBToHSV(new Color(ar, ag, ab), out hh, out ss, out vv);
+                    float hh, ss, vv; Color.RGBToHSV(sampled, out hh, out ss, out vv);
                     ss = Mathf.Clamp01(ss * (1f + 0.9f * vivid) + 0.04f * vivid);            // canlandirma dozu ayarli
                     vv = Mathf.Clamp01((vv - 0.5f) * (1f + 0.35f * vivid) + 0.5f);
                     cell[ry, rx] = Color.HSVToRGB(hh, ss, vv); solid[ry, rx] = true;
@@ -325,6 +325,39 @@ namespace ColorCargoLoop
             return rows;
         }
 
+        static Color SampleCellColorPreserveDetail(Color[] src, int sw, int sx0, int sx1, int sy0, int sy1, out float alpha)
+        {
+            float ar = 0f, ag = 0f, ab = 0f, aa = 0f;
+            int cnt = 0;
+            for (int yy = sy0; yy < sy1; yy++)
+            {
+                for (int xx = sx0; xx < sx1; xx++)
+                {
+                    Color c = src[yy * sw + xx];
+                    ar += c.r; ag += c.g; ab += c.b; aa += c.a; cnt++;
+                }
+            }
+            if (cnt <= 0) { alpha = 0f; return Color.clear; }
+
+            Color average = new Color(ar / cnt, ag / cnt, ab / cnt, aa / cnt);
+            alpha = average.a;
+            Color best = average;
+            float bestScore = -1f;
+            for (int yy = sy0; yy < sy1; yy++)
+            {
+                for (int xx = sx0; xx < sx1; xx++)
+                {
+                    Color c = src[yy * sw + xx];
+                    if (c.a < AlphaThreshold) continue;
+                    float h, s, v;
+                    Color.RGBToHSV(c, out h, out s, out v);
+                    float dr = c.r - average.r, dg = c.g - average.g, db = c.b - average.b;
+                    float score = (dr * dr + dg * dg + db * db) * 1.35f + s * 0.28f + c.a * 0.08f;
+                    if (score > bestScore) { bestScore = score; best = c; }
+                }
+            }
+            return Color.Lerp(average, best, 0.55f);
+        }
         // Algisal agirlikli renk uzakligi (goz yesile duyarli): quantize hatalari daha az goze batar
         static float ColorDist(Color a, Color b)
         {

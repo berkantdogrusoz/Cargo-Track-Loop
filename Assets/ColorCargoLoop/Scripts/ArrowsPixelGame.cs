@@ -1377,7 +1377,9 @@ namespace ColorCargoLoop
         [SerializeField] private bool useTapQueueFlow = true;
         [SerializeField] private bool usePandaThrowers = true; // ACIK: queue sepetleri yerine panda atici kullanir; sepet sistemi yedekte kalir
         [SerializeField] private GameObject pandaThrowerPrefab;
-        [SerializeField] private float pandaThrowerSize = 1.05f;
+        [SerializeField] private float pandaThrowerSize = 0.84f;
+        [SerializeField] private float pandaSlotHopHeight = 1.25f;
+        [SerializeField] private float pandaSlotHopDuration = 0.36f;
         [SerializeField] private Vector3 pandaThrowerEuler = new Vector3(0f, 180f, 0f);
         [SerializeField] private TMPro.TMP_FontAsset pandaCountFont; // panda kup sayisi fontu (bos = TMP default)
         [SerializeField] private TrailRenderer cubeTrailTemplate; // ucan kupun arkasindaki iz sablonu (sahnedeki 'trail efekt'; bos = efekt kapali)
@@ -1387,7 +1389,7 @@ namespace ColorCargoLoop
         [Header("Sahne Atamalari (Editor menusu doldurur; hiyerarsiden tasiyabilirsin)")]
         [SerializeField] private Transform pictureArea;    // UST: kup-resim bu noktaya kurulur (pozisyon+rotasyon ondan)
         [SerializeField] private Transform[] slotPoints;   // ORTA: tirin park edecegi slot noktalari (satir merkezi/Z buradan alinir)
-        [SerializeField] private int slotCount = 4;        // park slot SAYISI (slotPoints satiri ortalanir, bu kadar esit slot dizilir)
+        [SerializeField] private int slotCount = 5;        // park slot SAYISI (slotPoints satiri ortalanir, bu kadar esit slot dizilir)
         [SerializeField] private Transform parkingArea;    // ALT: tir puzzle grid merkezi
         [SerializeField] private bool autoSetupCamera = true; // kapatirsan kamerayi sen ayarlarsin
 
@@ -1402,6 +1404,9 @@ namespace ColorCargoLoop
         [SerializeField, Range(0f, 2f)] private float basketSpinTurns = 0.5f;         // kac tur (0.5 = yarim tur/180, daha sakin; simetrik sepet ayni gorunur)
         [SerializeField] private float portraitCubeSize = 0.180f; // potre kup boyutu; referansa yakin daha iri/net pixel
         [SerializeField] private bool showPortraitFrame = false; // potre cercevesi/zemini. false = kupler direkt resmi olusturur (cerceve yok)
+        [Header("Performans (dusuk cihaz)")]
+        [SerializeField] private bool usePortraitSockets = false; // KAPALI: portre hucre cukur dekorlari YOK -> binlerce mesh azalir (A21s icin sart)
+        [SerializeField] private bool usePandaOutline = false;    // KAPALI: panda ters-kabuk dis cizgisi YOK -> panda mesh'i 2x cizilmez (tris yariya iner)
 
         // --- Potre Yolu (konveyor: v1'deki hareketli yol, potre etrafini sarar) ---
         [Header("Potre Yolu (konveyor)")]
@@ -1535,10 +1540,10 @@ namespace ColorCargoLoop
         [SerializeField] private TMPro.TMP_Text tutorialText;
         [Tooltip("Sirayla gosterilecek mesajlar. Oyuncu ekrana tikladikca degisir; son mesajdan sonra panel kapanir.")]
         [TextArea(2, 4)] [SerializeField] private string[] tutorialMessages = new[] {
-            "Merhaba! Hadi oynamayi ogrenelim.",
-            "Yukaridaki resmi ayni renk kuplerle doldurmamiz gerek.",
-            "Sepetleri surukleyip kapidan cikar; kupler resme yerlesir.",
-            "Tum kupler yerlesince bolumu kazanirsin. Hadi dene!"
+            "Tap the front panda in a column to move it into a slot.",
+            "Each panda throws its colored cubes into the portrait.",
+            "After every slot has been filled once, empty slots start a countdown.",
+            "Fill an empty slot before the timer reaches 0, or you lose."
         };
         [Tooltip("Panel bitince 'sepet surukle' isareti yapan EL SPRITE'i. Kod runtime'da UI Image olusturur (sen sadece SPRITE at).")]
         [SerializeField] private Sprite tutorialHandSprite;
@@ -1546,6 +1551,22 @@ namespace ColorCargoLoop
         [SerializeField] private float tutorialHandSize = 120f;
         [Tooltip("El surukleme yonu/mesafesi (px).")]
         [SerializeField] private Vector2 tutorialHandDragOffset = new Vector2(0f, -140f);
+
+        [Header("Reklam Eli (video kaydi)")]
+        [Tooltip("Acikken el sprite'i mouse/touch pozisyonunu surekli takip eder; reklam videosu kaydi icin.")]
+        [SerializeField] private bool showAdHandForRecording = true;
+        [Tooltip("Reklamda gorunecek el sprite'i. Bos kalirsa tutorialHandSprite kullanilir.")]
+        [SerializeField] private Sprite adHandSprite;
+        [Tooltip("Istersen Canvas'taki hazir Image'i buraya bagla; bos kalirsa sprite'tan otomatik olusturur.")]
+        [SerializeField] private UnityEngine.UI.Image adHandImage;
+        [Tooltip("Reklam eli boyutu (px).")]
+        [SerializeField] private float adHandSize = 120f;
+        [Tooltip("Parmak imlecinin mouse/touch noktasina gore offset'i (px).")]
+        [SerializeField] private Vector2 adHandOffset = new Vector2(46f, -46f);
+        [Tooltip("Tik basiliyken elin sikisma olcegi.")]
+        [SerializeField, Range(0.5f, 1f)] private float adHandClickScale = 0.82f;
+        RectTransform adHandRect;
+        Vector3 adHandBaseScale = Vector3.one;
         [Tooltip("Bu kadar saniye hamle yapilmazsa el ipucu tekrar gosterilir. 0 = kapali.")]
         [SerializeField] private float idleHintDelay = 5f;
         [Tooltip("El ipucu SADECE bu level'e kadar gosterilir (1 = sadece Level 1). Diger levellerde cikmaz.")]
@@ -1605,9 +1626,18 @@ namespace ColorCargoLoop
         readonly Dictionary<CargoColor, List<GameObject>> cubesByColor = new Dictionary<CargoColor, List<GameObject>>();
         int activeCubeTransfers;
         int moveCount = 0;
+        Coroutine oneEmptySlotLoseRoutine;
+        bool oneEmptySlotLoseArmed;
+        int oneEmptySlotCountdownLastValue = int.MinValue;
         [Header("Level Ayarlari")]
         [Min(1)]
         [SerializeField] private int moveLimit = 30;
+        [SerializeField, Min(0.1f)] private float oneEmptySlotLoseSeconds = 3f;
+        [SerializeField, Min(0f)] private float oneEmptySlotLoseGraceSeconds = 2f;
+        [Tooltip("Bos slot lose geri sayimini gosterecek TMP text. Stili/konumu sende; kod 3-2-1-0 yazar.")]
+        [SerializeField] private TMPro.TMP_Text oneEmptySlotCountdownText;
+        [Tooltip("Geri sayimda sayi degistikce calacak ses. Bos kalirsa sessiz.")]
+        [SerializeField] private AudioClip oneEmptySlotCountdownTickSound;
         GameState gstate = GameState.Playing;
         bool inputLocked = false;
         TruckInfo dragTruck;
@@ -1684,6 +1714,11 @@ namespace ColorCargoLoop
         void PlayPandaCubeThrowSound()
         {
             if (pandaCubeThrowSound != null) AudioManager.PlayClip(pandaCubeThrowSound);
+        }
+
+        void PlayOneEmptySlotCountdownTickSound()
+        {
+            if (oneEmptySlotCountdownTickSound != null) AudioManager.PlayClip(oneEmptySlotCountdownTickSound);
         }
         Transform root;
         ColorCargoLoopGame oldGame;   // birebir uÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚ÂÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚ÂÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã‚ÂÃƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€šÃ‚Â¦ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â‚¬ÂÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â¦ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã¢â‚¬Â ÃƒÂ¢Ã¢â€šÂ¬Ã¢â€Â¢ÃƒÆ’Ã†â€™Ãƒâ€šÃ‚Â¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡Ãƒâ€šÃ‚Â¬ÃƒÆ’Ã¢â‚¬Â¦Ãƒâ€šÃ‚Â¡ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬Ãƒâ€¦Ã‚Â¡ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â§an kup mesh/material kaynagi
@@ -1772,7 +1807,7 @@ namespace ColorCargoLoop
 
         void BuildPortraitSocket(Transform parent, string name, Vector3 pos, Vector3 tileScale)
         {
-            if (parent == null) return;
+            if (parent == null || !usePortraitSockets) return; // PERFORMANS: kapaliyken binlerce cukur mesh'i olusmaz (A21s kasmasi)
             float sx = Mathf.Max(0.018f, tileScale.x * 0.86f);
             float sz = Mathf.Max(0.018f, tileScale.z * 0.86f);
             float h = Mathf.Max(0.006f, tileScale.y * 0.10f);
@@ -1808,6 +1843,7 @@ namespace ColorCargoLoop
 
         public void BuildLayout()
         {
+            StopOneEmptySlotLoseCountdown(true);
             if (root != null) DestroyImmediate(root.gameObject);
             foreach (var t in FindObjectsOfType<Transform>(true))
             {
@@ -1815,7 +1851,7 @@ namespace ColorCargoLoop
             }
             root = new GameObject("ArrowsPixelRoot").transform;
             ClearRuntimePictureGrid();
-            trucks.Clear(); slotList.Clear(); cubesByColor.Clear(); activeCubeTransfers = 0; moveCount = 0; inputLocked = false; gstate = GameState.Playing; levelTransitionPending = false;
+            trucks.Clear(); slotList.Clear(); cubesByColor.Clear(); activeCubeTransfers = 0; moveCount = 0; oneEmptySlotLoseArmed = false; oneEmptySlotCountdownLastValue = int.MinValue; inputLocked = false; gstate = GameState.Playing; levelTransitionPending = false;
             useTapQueueFlow = true;
             useBasketMode = false;
             ApplyMobilePerformanceProfile();
@@ -1914,8 +1950,13 @@ namespace ColorCargoLoop
             Application.targetFrameRate = 60;
             QualitySettings.vSyncCount = 0;
             QualitySettings.antiAliasing = 0;
-            QualitySettings.shadowDistance = 14f;
+            QualitySettings.shadows = ShadowQuality.Disable;
+            QualitySettings.shadowDistance = 0f;
             QualitySettings.shadowResolution = ShadowResolution.Low;
+            QualitySettings.pixelLightCount = 0;
+            QualitySettings.realtimeReflectionProbes = false;
+            QualitySettings.softParticles = false;
+            QualitySettings.particleRaycastBudget = 0;
             var cam = gameCamera != null ? gameCamera : Camera.main;
             if (cam == null) return;
             var ud = cam.GetComponent<UnityEngine.Rendering.Universal.UniversalAdditionalCameraData>();
@@ -2538,6 +2579,7 @@ namespace ColorCargoLoop
             for (int i = 0; i < slotList.Count; i++) if (slotList[i].occupant == null) { free = slotList[i]; break; }
             if (free == null) return;                                      // bos slot yok -> bekle
             free.occupant = basket;
+            RefreshOneEmptySlotLoseCountdown();
             basket.extracted = true;                                       // tekrar tiklanmasin
             StartCoroutine(PourToSlot(basket, col, free));
         }
@@ -2558,6 +2600,7 @@ namespace ColorCargoLoop
             if (basket != null && basket.root != null) Destroy(basket.root.gameObject);        // 3) sepet YOK OLUR
             trucks.Remove(basket);
             slot.occupant = null;                                                             // slot bosalir
+            RefreshOneEmptySlotLoseCountdown();
             BasketWinCheck();
         }
 
@@ -2615,10 +2658,35 @@ namespace ColorCargoLoop
             while (e < dur && tr != null) { e += Time.deltaTime; float u = Mathf.SmoothStep(0f, 1f, Mathf.Clamp01(e / dur)); tr.position = Vector3.LerpUnclamped(from, to, u); yield return null; }
             if (tr != null) tr.position = to;
         }
+        System.Collections.IEnumerator MovePandaSlotHop(Transform tr, Vector3 from, Vector3 to, Quaternion startRot, Quaternion endRot)
+        {
+            float dur = Mathf.Max(0.05f, pandaSlotHopDuration);
+            float height = Mathf.Max(0.05f, pandaSlotHopHeight);
+            float e = 0f;
+            from.y = TruckGroundY;
+            to.y = TruckGroundY;
+            while (e < dur && tr != null)
+            {
+                e += Time.deltaTime;
+                float t = Mathf.Clamp01(e / dur);
+                float u = Mathf.SmoothStep(0f, 1f, t);
+                Vector3 p = Vector3.LerpUnclamped(from, to, u);
+                p.y = TruckGroundY + Mathf.Sin(u * Mathf.PI) * height;
+                tr.position = p;
+                tr.rotation = Quaternion.Slerp(startRot, endRot, u);
+                yield return null;
+            }
+            if (tr != null)
+            {
+                tr.position = to;
+                tr.rotation = endRot;
+            }
+        }
 
         void BasketWinCheck()
         {
             foreach (var kv in cubesByColor) if (kv.Value != null && kv.Value.Count > 0) return; // bitmedi
+            StopOneEmptySlotLoseCountdown(false);
             gstate = GameState.Won; inputLocked = true;
             coinAmount += Mathf.Max(0, coinPerLevel); UpdateCoinUI();
             Analytics.LevelWin(currentLevel, moveCount);
@@ -3884,20 +3952,9 @@ namespace ColorCargoLoop
             label.transform.localRotation = Quaternion.Euler(82f, 0f, 0f);
 
             string value = Mathf.Max(0, count).ToString();
-            float fontSize = 2.30f;   // referans stil: iri, tombul rakam
-            float outline = 0.014f;   // ince siyah kontur (kalin degil)
-            TMPro.TextMeshPro[] layers = new TMPro.TextMeshPro[9];
-            int n = 0;
-            layers[n++] = BuildPandaCountTextLayer(label.transform, "PandaCountOutlineL", value, new Vector3(-outline, 0f, 0f), Color.black, fontSize, -6);
-            layers[n++] = BuildPandaCountTextLayer(label.transform, "PandaCountOutlineR", value, new Vector3(outline, 0f, 0f), Color.black, fontSize, -6);
-            layers[n++] = BuildPandaCountTextLayer(label.transform, "PandaCountOutlineU", value, new Vector3(0f, outline, 0f), Color.black, fontSize, -6);
-            layers[n++] = BuildPandaCountTextLayer(label.transform, "PandaCountOutlineD", value, new Vector3(0f, -outline, 0f), Color.black, fontSize, -6);
-            layers[n++] = BuildPandaCountTextLayer(label.transform, "PandaCountOutlineUL", value, new Vector3(-outline, outline, 0f), Color.black, fontSize, -6);
-            layers[n++] = BuildPandaCountTextLayer(label.transform, "PandaCountOutlineUR", value, new Vector3(outline, outline, 0f), Color.black, fontSize, -6);
-            layers[n++] = BuildPandaCountTextLayer(label.transform, "PandaCountOutlineDL", value, new Vector3(-outline, -outline, 0f), Color.black, fontSize, -6);
-            layers[n++] = BuildPandaCountTextLayer(label.transform, "PandaCountOutlineDR", value, new Vector3(outline, -outline, 0f), Color.black, fontSize, -6);
-            layers[n++] = BuildPandaCountTextLayer(label.transform, "PandaCountText", value, Vector3.zero, Color.white, fontSize, -5);
-            return layers;
+            // PERFORMANS: 9 TMP katmani yerine TEK TMP + SDF font outline (ayni tombul-konturlu gorunum, 9x az obje/draw).
+            var text = BuildPandaCountTextLayer(label.transform, "PandaCountText", value, Vector3.zero, Color.white, 2.30f, -5);
+            return new TMPro.TextMeshPro[] { text };
         }
 
         TMPro.TextMeshPro BuildPandaCountTextLayer(Transform parent, string name, string value, Vector3 localPos, Color color, float fontSize, int sortingOrder)
@@ -3916,6 +3973,8 @@ namespace ColorCargoLoop
             text.fontWeight = TMPro.FontWeight.Black;
             text.fontSize = fontSize;
             text.color = color;
+            text.outlineWidth = 0.22f;          // SDF kontur: 9 katmanin yerine (siyah ince cizgi)
+            text.outlineColor = Color.black;
             text.textWrappingMode = TMPro.TextWrappingModes.NoWrap;
             text.rectTransform.sizeDelta = new Vector2(1.40f, 0.56f);
             text.extraPadding = true;
@@ -4021,7 +4080,7 @@ namespace ColorCargoLoop
         Material _pandaOutlineMat;
         void BuildPandaOutlineHull(GameObject model)
         {
-            if (model == null || pandaOutlineWidth <= 0f) return;
+            if (model == null || !usePandaOutline || pandaOutlineWidth <= 0f) return; // PERFORMANS: kapaliyken panda mesh 2x cizilmez
             if (_pandaOutlineMat == null)
             {
                 Shader hull = Shader.Find("Color Cargo Loop/Outline Hull");
@@ -4044,44 +4103,43 @@ namespace ColorCargoLoop
             }
         }
 
+        Material _sharedPandaToonMat; // PERFORMANS: tum pandalar TEK materyali paylasir (setPass ~190 -> ~10)
         void ApplyPandaToonMaterials(GameObject model)
         {
             Shader toon = Shader.Find("Color Cargo Loop/Toon Plastic");
             if (toon == null) return;
             Renderer[] renderers = model.GetComponentsInChildren<Renderer>();
-            for (int r = 0; r < renderers.Length; r++)
+            if (renderers.Length == 0) return;
+
+            if (_sharedPandaToonMat == null)
             {
-                Material[] mats = renderers[r].materials;
-                for (int i = 0; i < mats.Length; i++)
+                // BIR KEZ olustur: tum pandalar ayni model+texture -> paylasilan materyal (her panda kendi kopyasi YOK)
+                Material src = renderers[0].sharedMaterial;
+                Material m = new Material(toon) { name = "PandaToonShared" };
+                Texture tex = src != null ? src.mainTexture : null;
+                if (tex == null && src != null && src.HasProperty("_BaseMap")) tex = src.GetTexture("_BaseMap");
+                if (tex == null && src != null && src.HasProperty("_MainTex")) tex = src.GetTexture("_MainTex");
+                if (tex == null) tex = Resources.Load<Texture2D>("PandaToy/tripo_convert_d47b84d0-cf5a-4452-a58e-47ad933360e2.fbm/panda_toy_3d_model_basecolor");
+                if (tex != null)
                 {
-                    Material src = mats[i];
-                    Material m = new Material(toon) { name = "PandaToon" };
-                    Texture tex = src != null ? src.mainTexture : null;
-                    if (tex == null && src != null && src.HasProperty("_BaseMap")) tex = src.GetTexture("_BaseMap");
-                    if (tex == null && src != null && src.HasProperty("_MainTex")) tex = src.GetTexture("_MainTex");
-                    if (tex == null) tex = Resources.Load<Texture2D>("PandaToy/tripo_convert_d47b84d0-cf5a-4452-a58e-47ad933360e2.fbm/panda_toy_3d_model_basecolor");
-                    if (tex != null)
-                    {
-                        if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
-                        if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
-                    }
-                    Color baseColor = Color.white;
-                    if (src != null && src.HasProperty("_BaseColor")) baseColor = src.GetColor("_BaseColor");
-                    else if (src != null && src.HasProperty("_Color")) baseColor = src.GetColor("_Color");
-                    if (m.HasProperty("_Color")) m.SetColor("_Color", baseColor);
-                    if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", baseColor);
-                    if (m.HasProperty("_ShadowColor")) m.SetColor("_ShadowColor", new Color(0.38f, 0.34f, 0.48f));
-                    if (m.HasProperty("_ShadeStrength")) m.SetFloat("_ShadeStrength", 0.42f);
-                    if (m.HasProperty("_RampThreshold")) m.SetFloat("_RampThreshold", 0.50f);
-                    if (m.HasProperty("_HighlightColor")) m.SetColor("_HighlightColor", Color.white);
-                    if (m.HasProperty("_HighlightStrength")) m.SetFloat("_HighlightStrength", 0.36f);
-                    if (m.HasProperty("_RimStrength")) m.SetFloat("_RimStrength", 0.18f);
-                    if (m.HasProperty("_OutlineColor")) m.SetColor("_OutlineColor", toonOutlineColor);
-                    if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", pandaOutlineWidth);
-                    mats[i] = m;
+                    if (m.HasProperty("_MainTex")) m.SetTexture("_MainTex", tex);
+                    if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
                 }
-                renderers[r].materials = mats;
+                if (m.HasProperty("_Color")) m.SetColor("_Color", Color.white);
+                if (m.HasProperty("_BaseColor")) m.SetColor("_BaseColor", Color.white);
+                if (m.HasProperty("_ShadowColor")) m.SetColor("_ShadowColor", new Color(0.38f, 0.34f, 0.48f));
+                if (m.HasProperty("_ShadeStrength")) m.SetFloat("_ShadeStrength", 0.42f);
+                if (m.HasProperty("_RampThreshold")) m.SetFloat("_RampThreshold", 0.50f);
+                if (m.HasProperty("_HighlightColor")) m.SetColor("_HighlightColor", Color.white);
+                if (m.HasProperty("_HighlightStrength")) m.SetFloat("_HighlightStrength", 0.36f);
+                if (m.HasProperty("_RimStrength")) m.SetFloat("_RimStrength", 0.18f);
+                if (m.HasProperty("_OutlineColor")) m.SetColor("_OutlineColor", toonOutlineColor);
+                if (m.HasProperty("_OutlineWidth")) m.SetFloat("_OutlineWidth", pandaOutlineWidth);
+                m.enableInstancing = true;
+                _sharedPandaToonMat = m;
             }
+
+            for (int r = 0; r < renderers.Length; r++) renderers[r].sharedMaterial = _sharedPandaToonMat;
         }
 
         Transform FindChildDeep(Transform parent, string childName)
@@ -4852,6 +4910,7 @@ namespace ColorCargoLoop
         {
             AnimatePortraitRoad();   // konveyor surekli aksin
             UpdatePanelMusic();      // panel acikken arka plan muzigi sus
+            UpdateAdHandCursor();    // reklam kaydi eli: mouse/touch takip + tiklama sikismasi
             if (gstate != GameState.Playing || trucks.Count == 0) return;
             // IDLE IPUCU: bir sure hamle yapilmazsa el tekrar gorunsun (her level)
             if (idleHintDelay > 0f && currentLevel <= idleHintMaxLevel && !handHintShowing && !tutorialActive && !inputLocked && tutorialHandSprite != null
@@ -4974,6 +5033,92 @@ namespace ColorCargoLoop
             return false;
         }
 
+        bool CurrentPointerScreenPosition(out Vector3 screenPos)
+        {
+            screenPos = Vector3.zero;
+#if ENABLE_LEGACY_INPUT_MANAGER
+            if (Input.touchCount > 0) { screenPos = Input.GetTouch(0).position; return true; }
+            screenPos = Input.mousePosition;
+            return true;
+#else
+            return false;
+#endif
+        }
+
+        bool CurrentPointerPressed()
+        {
+#if ENABLE_LEGACY_INPUT_MANAGER
+            if (Input.GetMouseButton(0)) return true;
+            if (Input.touchCount <= 0) return false;
+            TouchPhase phase = Input.GetTouch(0).phase;
+            return phase != TouchPhase.Ended && phase != TouchPhase.Canceled;
+#else
+            return false;
+#endif
+        }
+
+        void UpdateAdHandCursor()
+        {
+#if !UNITY_EDITOR
+            // BUILD'de reklam eli GORUNMEZ (sadece Unity editorde video kaydi icin). Product'a tasinmaz.
+            if (adHandImage != null) adHandImage.gameObject.SetActive(false);
+            return;
+#else
+            if (!showAdHandForRecording)
+            {
+                if (adHandImage != null) adHandImage.gameObject.SetActive(false);
+                return;
+            }
+#endif
+
+            EnsureAdHandCursor();
+            if (adHandImage == null || adHandRect == null) return;
+            if (!CurrentPointerScreenPosition(out Vector3 screen))
+            {
+                adHandImage.gameObject.SetActive(false);
+                return;
+            }
+
+            RectTransform parentRT = adHandRect.parent as RectTransform;
+            Canvas canvas = adHandRect.GetComponentInParent<Canvas>();
+            Camera uiCam = (canvas != null && canvas.renderMode != RenderMode.ScreenSpaceOverlay) ? canvas.worldCamera : null;
+            if (parentRT != null && RectTransformUtility.ScreenPointToLocalPointInRectangle(parentRT, screen + (Vector3)adHandOffset, uiCam, out Vector2 local))
+                adHandRect.anchoredPosition = local;
+
+            float targetScale = CurrentPointerPressed() ? adHandClickScale : 1f;
+            adHandRect.localScale = adHandBaseScale * targetScale;
+            adHandImage.gameObject.SetActive(true);
+        }
+
+        void EnsureAdHandCursor()
+        {
+            Sprite sprite = adHandSprite != null ? adHandSprite : tutorialHandSprite;
+            if (adHandImage == null)
+            {
+                if (sprite == null) return;
+                Canvas canvas = tutorialPanel != null ? tutorialPanel.GetComponentInParent<Canvas>() : FindObjectOfType<Canvas>();
+                if (canvas == null) return;
+                GameObject go = new GameObject("[AdHandCursor]");
+                go.transform.SetParent(canvas.transform, false);
+                adHandImage = go.AddComponent<UnityEngine.UI.Image>();
+                adHandImage.raycastTarget = false;
+                adHandImage.preserveAspect = true;
+                adHandRect = adHandImage.rectTransform;
+                adHandRect.sizeDelta = new Vector2(Mathf.Max(16f, adHandSize), Mathf.Max(16f, adHandSize));
+                adHandRect.anchorMin = new Vector2(0.5f, 0.5f);
+                adHandRect.anchorMax = new Vector2(0.5f, 0.5f);
+                adHandRect.pivot = new Vector2(0.2f, 0.82f);
+                go.transform.SetAsLastSibling();
+            }
+
+            if (adHandImage == null) return;
+            if (sprite != null && adHandImage.sprite != sprite) adHandImage.sprite = sprite;
+            adHandImage.raycastTarget = false;
+            adHandImage.preserveAspect = true;
+            adHandRect = adHandImage.rectTransform;
+            if (adHandRect != null && adHandRect.sizeDelta.sqrMagnitude <= 0.01f)
+                adHandRect.sizeDelta = new Vector2(Mathf.Max(16f, adHandSize), Mathf.Max(16f, adHandSize));
+        }
         TruckInfo FindTruck(Transform t)
         {
             while (t != null)
@@ -5023,6 +5168,7 @@ namespace ColorCargoLoop
                 AudioManager.Play(AudioManager.Sfx.BasketGrab);
             }
             free.occupant = t;
+            RefreshOneEmptySlotLoseCountdown();
             t.extracted = true;
             t.moving = true;
             moveCount++;
@@ -5049,6 +5195,171 @@ namespace ColorCargoLoop
             for (int i = 0; i < slotList.Count; i++)
                 if (slotList[i].occupant == null) return slotList[i];
             return null;
+        }
+
+        int FreeSlotCount(out SlotInfo onlyFreeSlot)
+        {
+            onlyFreeSlot = null;
+            int count = 0;
+            for (int i = 0; i < slotList.Count; i++)
+            {
+                SlotInfo slot = slotList[i];
+                if (slot == null || slot.occupant != null) continue;
+                count++;
+                onlyFreeSlot = count == 1 ? slot : null;
+                if (count > 1) onlyFreeSlot = null;
+            }
+            if (count != 1) onlyFreeSlot = null;
+            return count;
+        }
+
+        void RefreshOneEmptySlotLoseCountdown()
+        {
+            if (gstate != GameState.Playing || oneEmptySlotLoseSeconds <= 0f || slotList.Count == 0)
+            {
+                StopOneEmptySlotLoseCountdown(false);
+                return;
+            }
+
+            // BITIS KORUMASI: kuyrukta gonderilecek panda kalmadiysa bos slot NORMALDIR (portre tamamlaniyor).
+            // Yoksa son pandalar atilirken slotlar bosalinca yanlis lose tetikleniyordu.
+            bool anyQueuePanda = false;
+            for (int i = 0; i < trucks.Count; i++)
+            {
+                TruckInfo qt = trucks[i];
+                if (qt != null && !qt.extracted && qt.root != null) { anyQueuePanda = true; break; }
+            }
+            if (!anyQueuePanda)
+            {
+                StopOneEmptySlotLoseCountdown(false);
+                return;
+            }
+
+            SlotInfo freeSlot;
+            int freeCount = FreeSlotCount(out freeSlot);
+
+            if (freeCount == 0 && (moveCount > 0 || slotList.Count == 1))
+            {
+                oneEmptySlotLoseArmed = true;
+                StopOneEmptySlotLoseCountdown(false);
+                return;
+            }
+
+            if (!oneEmptySlotLoseArmed || freeCount <= 0)
+            {
+                StopOneEmptySlotLoseCountdown(false);
+                return;
+            }
+
+            if (oneEmptySlotLoseRoutine == null)
+                oneEmptySlotLoseRoutine = StartCoroutine(OneEmptySlotLoseRoutine());
+        }
+
+        bool ShouldContinueOneEmptySlotLoseCountdown()
+        {
+            if (gstate != GameState.Playing || !oneEmptySlotLoseArmed) return false;
+            // Geri sayim sirasinda son pandalar atilip kuyruk bosaldiysa: iptal (portre tamamlaniyor, lose degil)
+            bool anyQueuePanda = false;
+            for (int i = 0; i < trucks.Count; i++)
+            {
+                TruckInfo qt = trucks[i];
+                if (qt != null && !qt.extracted && qt.root != null) { anyQueuePanda = true; break; }
+            }
+            if (!anyQueuePanda) return false;
+            SlotInfo freeSlot;
+            return FreeSlotCount(out freeSlot) > 0;
+        }
+
+        System.Collections.IEnumerator OneEmptySlotLoseRoutine()
+        {
+            oneEmptySlotCountdownLastValue = int.MinValue;
+            SetOneEmptySlotCountdownVisible(false);
+
+            float graceLeft = Mathf.Max(0f, oneEmptySlotLoseGraceSeconds);
+            while (graceLeft > 0f)
+            {
+                if (!ShouldContinueOneEmptySlotLoseCountdown())
+                {
+                    oneEmptySlotLoseRoutine = null;
+                    SetOneEmptySlotCountdownVisible(false);
+                    yield break;
+                }
+
+                graceLeft -= Time.deltaTime;
+                yield return null;
+            }
+
+            float left = Mathf.Max(0.1f, oneEmptySlotLoseSeconds);
+            while (left > 0f)
+            {
+                if (!ShouldContinueOneEmptySlotLoseCountdown())
+                {
+                    oneEmptySlotLoseRoutine = null;
+                    SetOneEmptySlotCountdownVisible(false);
+                    yield break;
+                }
+
+                UpdateOneEmptySlotCountdown(left);
+                left -= Time.deltaTime;
+                yield return null;
+            }
+
+            if (!ShouldContinueOneEmptySlotLoseCountdown())
+            {
+                oneEmptySlotLoseRoutine = null;
+                SetOneEmptySlotCountdownVisible(false);
+                yield break;
+            }
+
+            UpdateOneEmptySlotCountdown(0f);
+            yield return new WaitForSeconds(0.25f);
+
+            bool stillEmpty = ShouldContinueOneEmptySlotLoseCountdown();
+            SetOneEmptySlotCountdownVisible(false);
+            oneEmptySlotLoseRoutine = null;
+            if (stillEmpty) TriggerOneEmptySlotLose();
+        }
+
+        void StopOneEmptySlotLoseCountdown(bool destroyLabel)
+        {
+            if (oneEmptySlotLoseRoutine != null)
+            {
+                StopCoroutine(oneEmptySlotLoseRoutine);
+                oneEmptySlotLoseRoutine = null;
+            }
+            oneEmptySlotCountdownLastValue = int.MinValue;
+            SetOneEmptySlotCountdownVisible(false);
+        }
+
+        void SetOneEmptySlotCountdownVisible(bool visible)
+        {
+            if (!visible) oneEmptySlotCountdownLastValue = int.MinValue;
+            if (oneEmptySlotCountdownText != null)
+                oneEmptySlotCountdownText.gameObject.SetActive(visible);
+        }
+
+        void UpdateOneEmptySlotCountdown(float secondsLeft)
+        {
+            int max = Mathf.Max(1, Mathf.CeilToInt(oneEmptySlotLoseSeconds));
+            int displayValue = Mathf.Clamp(Mathf.CeilToInt(secondsLeft), 0, max);
+            if (displayValue != oneEmptySlotCountdownLastValue)
+            {
+                oneEmptySlotCountdownLastValue = displayValue;
+                PlayOneEmptySlotCountdownTickSound();
+            }
+
+            if (oneEmptySlotCountdownText == null) return;
+            oneEmptySlotCountdownText.text = displayValue.ToString();
+            oneEmptySlotCountdownText.gameObject.SetActive(true);
+        }
+        void TriggerOneEmptySlotLose()
+        {
+            if (gstate != GameState.Playing) return;
+            gstate = GameState.Lost;
+            inputLocked = true;
+            Analytics.LevelLose(currentLevel, moveCount);
+            AltareLog("level_fail", new Dictionary<string, object> { { "level", currentLevel }, { "moves_used", moveCount }, { "reason", "one_empty_slot_timeout" } });
+            ShowEndPanel(losePanel, false);
         }
 
         void CompressQueueColumn(int gx)
@@ -5120,7 +5431,10 @@ namespace ColorCargoLoop
             List<GameObject> list = null;
             cubesByColor.TryGetValue(basket.cargo, out list);
             bool pandaThrow = UsePandaThrowers();
-            yield return MoveWorldPos(basket.root, from, to, 0.30f);
+            if (pandaThrow)
+                yield return MovePandaSlotHop(basket.root, from, to, basket.root.rotation, PandaSlotThrowRotation(basket, slot, list));
+            else
+                yield return MoveWorldPos(basket.root, from, to, 0.30f);
             basket.root.rotation = pandaThrow ? PandaSlotThrowRotation(basket, slot, list) : Quaternion.identity;
 
             int count = Mathf.Min(Mathf.Max(1, basket.capacity), list != null ? list.Count : 0);
@@ -5147,6 +5461,7 @@ namespace ColorCargoLoop
             if (basket.root != null) Destroy(basket.root.gameObject);
             trucks.Remove(basket);
             slot.occupant = null;
+            RefreshOneEmptySlotLoseCountdown();
             BasketWinCheck();
         }
         void TryPuzzleMove(TruckInfo t, int dx, int dz)
@@ -5159,6 +5474,7 @@ namespace ColorCargoLoop
                 for (int i = 0; i < slotList.Count; i++) if (slotList[i].occupant == null) { free = slotList[i]; break; }
                 if (free == null) { StartCoroutine(ReturnToCellRoutine(t, true)); return; }
                 free.occupant = t;
+                RefreshOneEmptySlotLoseCountdown();
                 t.extracted = true;
                 t.moving = true;
                 t.exitDir = ExitDirectionVector(exitGate.direction);
@@ -5532,6 +5848,7 @@ namespace ColorCargoLoop
                 yield return null;
             }
             slot.occupant = null;
+            RefreshOneEmptySlotLoseCountdown();
             if (tr != null) Destroy(tr.gameObject);
             SpawnExtractFireworks(p0 + Vector3.up * 0.4f);   // sepet yok oldu -> o noktada havai fisek
             CheckEnd();
@@ -5616,6 +5933,7 @@ namespace ColorCargoLoop
             if (gstate != GameState.Playing) return;
             if (PictureEmpty())
             {
+                StopOneEmptySlotLoseCountdown(false);
                 gstate = GameState.Won;
                 inputLocked = true;
                 coinAmount += Mathf.Max(0, coinPerLevel); // her level tamamlaninca +50 coin (win odulu)
@@ -5627,6 +5945,7 @@ namespace ColorCargoLoop
             }
             if (moveCount >= moveLimit)
             {
+                StopOneEmptySlotLoseCountdown(false);
                 gstate = GameState.Lost;
                 inputLocked = true;
                 Analytics.LevelLose(currentLevel, moveCount);
@@ -5662,9 +5981,54 @@ namespace ColorCargoLoop
             if (_winPortraitSprite != null) { Destroy(_winPortraitSprite); _winPortraitSprite = null; }
             if (_winPortraitTexture != null) { Destroy(_winPortraitTexture); _winPortraitTexture = null; }
 
+            Texture2D sourceTexture = GetCurrentPortraitSourceTexture();
+            if (sourceTexture != null)
+            {
+_winPortraitSprite = Sprite.Create(sourceTexture, new Rect(0f, 0f, sourceTexture.width, sourceTexture.height), new Vector2(0.5f, 0.5f), 100f);
+                winPortraitImage.sprite = _winPortraitSprite;
+                winPortraitImage.preserveAspect = true;
+                return;
+            }
+
             _winPortraitSprite = CreateCompletedPortraitSprite(out _winPortraitTexture);
-            if (_winPortraitSprite != null) winPortraitImage.sprite = _winPortraitSprite;
+            if (_winPortraitSprite != null)
+            {
+                winPortraitImage.sprite = _winPortraitSprite;
+                winPortraitImage.preserveAspect = true;
+            }
         }
+
+        Texture2D GetCurrentPortraitSourceTexture()
+        {
+            if (portraitSet != null && portraitSet.HasPortraits)
+            {
+                int idx = Mathf.Max(0, currentLevel - 1) % portraitSet.portraits.Count;
+                ArrowsPixelPortraitSet.Entry entry = portraitSet.portraits[idx];
+                if (entry != null && entry.sourceTexture != null) return entry.sourceTexture;
+#if UNITY_EDITOR
+                Texture2D editorTexture = FindPortraitSourceTextureInEditor(entry != null ? entry.name : null);
+                if (editorTexture != null) return editorTexture;
+#endif
+            }
+            return null;
+        }
+
+#if UNITY_EDITOR
+        Texture2D FindPortraitSourceTextureInEditor(string entryName)
+        {
+            if (string.IsNullOrEmpty(entryName)) return null;
+            string query = "\"" + entryName + "\" t:Texture2D";
+            string[] guids = UnityEditor.AssetDatabase.FindAssets(query, new[] { "Assets/Art/Portraits" });
+            for (int i = 0; i < guids.Length; i++)
+            {
+                string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[i]);
+                if (System.IO.Path.GetFileNameWithoutExtension(path) != entryName) continue;
+                Texture2D tex = UnityEditor.AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                if (tex != null) return tex;
+            }
+            return null;
+        }
+#endif
 
         Sprite CreateCompletedPortraitSprite(out Texture2D texture)
         {
