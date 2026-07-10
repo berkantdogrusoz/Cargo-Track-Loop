@@ -1128,6 +1128,17 @@ namespace ColorCargoLoop
             return material;
         }
 
+        // Level degisince kargo materyallerini SIFIRLA: cache'lenmis "Cargo_*" materyalleri sil ki
+        // yeni level'in adaptive paleti (CargoColorPalette.Override) ile bastan olussunlar.
+        // (Yoksa ilk level'de olusan materyal tum oturum boyunca kalir -> sonraki potreler yanlis/eski renk.)
+        public void ResetCargoMaterials()
+        {
+            cargoMaterials.Clear();
+            var toRemove = new List<string>();
+            foreach (var kv in materials) if (kv.Key != null && kv.Key.StartsWith("Cargo_")) toRemove.Add(kv.Key);
+            for (int i = 0; i < toRemove.Count; i++) materials.Remove(toRemove[i]);
+        }
+
         public GameObject CreateCargoBlockObject(CargoColor color, string objectName)
         {
             GameObject block = new GameObject(objectName);
@@ -1319,14 +1330,16 @@ namespace ColorCargoLoop
 
         private Shader FindRuntimeShader(bool preferToon)
         {
+            // PROJE BUILT-IN pipeline: URP shader'lari burada MAGENTA cizer (URP paketi kurulu ama aktif degil).
+            // O yuzden fallback zinciri URP'ye ASLA dusmemeli - once toon, sonra Standard.
             Shader shader = preferToon ? Shader.Find(ToonPlasticShaderName) : null;
             if (shader == null)
             {
-                shader = Shader.Find("Universal Render Pipeline/Lit");
+                shader = Shader.Find("Standard");
             }
             if (shader == null)
             {
-                shader = Shader.Find("Standard");
+                shader = Shader.Find("Universal Render Pipeline/Lit"); // son care (URP aktif edilirse)
             }
             return shader;
         }

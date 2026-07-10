@@ -27,7 +27,17 @@ namespace ColorCargoLoop
         public static Color ToColor(CargoColor color)
         {
             if (color == CargoColor.Obstacle) return new Color(0.14f, 0.14f, 0.16f); // ENGEL her zaman siyah
-            if (Override != null) { int oi = (int)color; if (oi >= 0 && oi < Override.Length) return Override[oi]; }
+            // ADAPTIVE PALET aktifken: index paletten buyukse SABIT candy renklere DUSME.
+            // (Eski davranis: az-renkli potrede 6+ index -> hardcoded candy pembe = "materyal kirik" magenta gorunum.)
+            // Paletin icine sar -> her kup daima resmin KENDI renklerinden birini alir, magenta olmaz.
+            if (Override != null && Override.Length > 0)
+            {
+                int oi = (int)color;
+                if (oi < 0) oi = 0;
+                Color oc = Override[oi % Override.Length];
+                oc.a = 1f; // import kaynakli kirli alpha (0.99x) toon/transparan yolunu bozmasin - kup daima opak
+                return oc;
+            }
             switch (color)
             {
                 // CANDY pastel palet - birbirinden ayrik, dekor objeleriyle uyumlu

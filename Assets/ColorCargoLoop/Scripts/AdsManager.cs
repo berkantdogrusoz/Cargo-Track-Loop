@@ -7,6 +7,7 @@ namespace ColorCargoLoop
     {
         const string DefaultInterstitialAndroid = "ca-app-pub-1985873646762305/9394460668";
         const string DefaultRewardedAndroid = "ca-app-pub-1985873646762305/9250000759";
+        const string DefaultBannerAndroid = "ca-app-pub-1985873646762305/8471313113";
 
         static AdsManager instance;
 
@@ -30,8 +31,14 @@ namespace ColorCargoLoop
         [SerializeField] private bool editorAutoReward = true;
         [SerializeField] private string androidInterstitialAdUnitId = DefaultInterstitialAndroid;
         [SerializeField] private string androidRewardedAdUnitId = DefaultRewardedAndroid;
+        [SerializeField] private string androidBannerAdUnitId = DefaultBannerAndroid;
 
         bool initialized;
+        bool bannerVisible;
+#if UNITY_ANDROID && !UNITY_EDITOR
+        GoogleMobileAds.Api.BannerView bannerView;
+        bool gmaInitialized;
+#endif
         bool rewardedEarned;
         Action interstitialFinished;
         Action<bool> rewardedFinished;
@@ -130,6 +137,68 @@ namespace ColorCargoLoop
             }
 #else
             onFinished?.Invoke(editorAutoReward);
+#endif
+        }
+
+        // ================== BANNER (Google Mobile Ads C# API - alt bant) ==================
+        // Interstitial/rewarded native Java koprusunden gider; banner Unity plugin'inden.
+        // ArrowsPixelGame level esigine gore cagirir (yeni oyuncu ilk levellerde reklamsiz).
+
+        public void ShowBanner()
+        {
+            if (!adsEnabled) { bannerVisible = false; return; }
+            if (bannerVisible) return;
+            Initialize();
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try
+            {
+                if (!gmaInitialized)
+                {
+                    gmaInitialized = true;
+                    GoogleMobileAds.Api.MobileAds.Initialize(_ => { }); // native SDK zaten Java tarafinda init; bu cagri idempotent
+                }
+                if (bannerView == null)
+                {
+                    var size = GoogleMobileAds.Api.AdSize.GetCurrentOrientationAnchoredAdaptiveBannerAdSizeWithWidth(
+                        GoogleMobileAds.Api.AdSize.FullWidth);
+                    bannerView = new GoogleMobileAds.Api.BannerView(
+                        string.IsNullOrEmpty(androidBannerAdUnitId) ? DefaultBannerAndroid : androidBannerAdUnitId,
+                        size,
+                        GoogleMobileAds.Api.AdPosition.Bottom);
+                    bannerView.LoadAd(new GoogleMobileAds.Api.AdRequest());
+                }
+                else
+                {
+                    bannerView.Show();
+                }
+                bannerVisible = true;
+            }
+            catch (Exception ex)
+            {
+                Debug.LogWarning("[Ads] Banner gosterilemedi: " + ex.Message);
+            }
+#else
+            bannerVisible = true;
+            Debug.Log("[Ads] (Editor) Banner GOSTER - simule");
+#endif
+        }
+
+        public void HideBanner()
+        {
+            if (!bannerVisible) return;
+            bannerVisible = false;
+#if UNITY_ANDROID && !UNITY_EDITOR
+            try { if (bannerView != null) bannerView.Hide(); }
+            catch (Exception ex) { Debug.LogWarning("[Ads] Banner gizlenemedi: " + ex.Message); }
+#else
+            Debug.Log("[Ads] (Editor) Banner GIZLE - simule");
+#endif
+        }
+
+        void OnDestroy()
+        {
+#if UNITY_ANDROID && !UNITY_EDITOR
+            if (bannerView != null) { bannerView.Destroy(); bannerView = null; }
 #endif
         }
 

@@ -26,6 +26,7 @@ dependencies {
     implementation 'com.google.firebase:firebase-crashlytics-unity:13.12.0' // Assets/Firebase/Editor/CrashlyticsDependencies.xml:23
     implementation 'com.google.firebase:firebase-firestore:26.3.0' // Assets/Firebase/Editor/FirestoreDependencies.xml:16
     implementation 'com.google.firebase:firebase-firestore-unity:13.12.0' // Assets/Firebase/Editor/FirestoreDependencies.xml:23
+    implementation 'com.google.games:gpgs-plugin-support:2.1.0' // Packages/com.google.play.games/Editor/GooglePlayGamesPluginDependencies.xml:11
 // Android Resolver Dependencies End
 **DEPS**}
 

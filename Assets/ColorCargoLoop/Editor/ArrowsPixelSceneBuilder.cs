@@ -139,11 +139,13 @@ namespace ColorCargoLoopEditor
             Button b0 = CreateUIButton(bar.transform, "Booster_Destroy",  "YOK ET",   0);
             Button b1 = CreateUIButton(bar.transform, "Booster_ExtraExit","+KAPI",    1);
             Button b2 = CreateUIButton(bar.transform, "Booster_Shuffle",  "KARISTIR", 2);
+            Button b3 = CreateUIButton(bar.transform, "Booster_ExtraSlot", "+SLOT",    3);
 
             SerializedObject so = new SerializedObject(game);
             SetRef(so, "destroyFillerButton", b0);
             SetRef(so, "extraExitButton", b1);
             SetRef(so, "shuffleButton", b2);
+            SetRef(so, "extraSlotButton", b3);
             SerializedProperty sbb = so.FindProperty("showBoosterButtons");
             if (sbb != null) sbb.boolValue = false; // artik sahnedeki kalici butonlar kullanilacak
             so.ApplyModifiedPropertiesWithoutUndo();
@@ -158,8 +160,8 @@ namespace ColorCargoLoopEditor
         // Bar genisligine gore oransal anchorlanmis buton (aspect degisince butonlar da olceklenir)
         static Button CreateUIButton(Transform parent, string name, string label, int index)
         {
-            float[] mins = { 0.00f, 0.34f, 0.68f };
-            float[] maxs = { 0.32f, 0.66f, 1.00f };
+            float[] mins = { 0.00f, 0.255f, 0.510f, 0.765f };
+            float[] maxs = { 0.235f, 0.490f, 0.745f, 1.000f };
             GameObject go = new GameObject(name, typeof(RectTransform), typeof(Image), typeof(Button));
             go.transform.SetParent(parent, false);
             RectTransform rt = go.GetComponent<RectTransform>();
@@ -201,6 +203,7 @@ namespace ColorCargoLoopEditor
             n += WireOneCountText(so, "destroyFillerButton", "destroyFillerCountText") ? 1 : 0;
             n += WireOneCountText(so, "extraExitButton", "extraExitCountText") ? 1 : 0;
             n += WireOneCountText(so, "shuffleButton", "shuffleCountText") ? 1 : 0;
+            n += WireOneCountText(so, "extraSlotButton", "extraSlotCountText") ? 1 : 0;
             so.ApplyModifiedPropertiesWithoutUndo();
             EditorUtility.SetDirty(game);
             EditorSceneManager.MarkSceneDirty(game.gameObject.scene);

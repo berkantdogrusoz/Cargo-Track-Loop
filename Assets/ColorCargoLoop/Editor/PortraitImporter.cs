@@ -302,6 +302,7 @@ namespace ColorCargoLoop
             palette = MedianCut(sample, Mathf.Clamp(colorCount, 2, SlotChars.Length));
             if (palette == null || palette.Length == 0) palette = new[] { Color.gray };
             KMeansRefine(sample, palette, 4);
+            EnsureSalientColors(cell, solid, th, tw, palette); // goz/kontur gibi NADIR ama KRITIK renkler slot kazansin (yoksa yuze/bg'ye erirdi)
 
             // 3) her hucreyi cikarilan palette'e EN YAKIN slot'a esle (algisal agirlikli mesafe)
             string[] rows = new string[th];
@@ -358,6 +359,44 @@ namespace ColorCargoLoop
             }
             return Color.Lerp(average, best, 0.55f);
         }
+        // KRITIK RENK GARANTISI: palet, kucuk-ama-onemli renkleri (goz, kontur, minik vurgu) kacirmis olabilir.
+        // En KOTU temsil edilen hucre rengini bulur, paletteki EN AZ kullanilan slotu onunla degistirir (2 tur).
+        // Boylece resimdeki her belirgin detay renk mutlaka bir slota oturur -> "goz atlaniyor/renk degisiyor" biter.
+        static void EnsureSalientColors(Color[,] cell, bool[,] solid, int th, int tw, Color[] palette)
+        {
+            if (palette == null || palette.Length < 3) return;
+            for (int round = 0; round < 2; round++)
+            {
+                int[] usage = new int[palette.Length];
+                float worst = 0f; Color worstColor = Color.black;
+                for (int ry = 0; ry < th; ry++)
+                    for (int rx = 0; rx < tw; rx++)
+                    {
+                        if (!solid[ry, rx]) continue;
+                        int best = 0; float bd = float.MaxValue;
+                        for (int p = 0; p < palette.Length; p++)
+                        {
+                            float d = ColorDist(cell[ry, rx], palette[p]);
+                            if (d < bd) { bd = d; best = p; }
+                        }
+                        usage[best]++;
+                        if (bd > worst) { worst = bd; worstColor = cell[ry, rx]; }
+                    }
+                if (worst < 0.018f) return; // her renk zaten yeterince iyi temsil ediliyor
+
+                // worstColor'a benzeyen hucre sayisi: gercek bir detay mi, yoksa tek-pixel gurultu mu?
+                int worstCount = 0;
+                for (int ry = 0; ry < th; ry++)
+                    for (int rx = 0; rx < tw; rx++)
+                        if (solid[ry, rx] && ColorDist(cell[ry, rx], worstColor) < 0.010f) worstCount++;
+                if (worstCount < 2) return; // tek pixel -> gurultu, palete alma
+
+                int leastUsed = 0; int leastN = int.MaxValue;
+                for (int p = 0; p < palette.Length; p++) if (usage[p] < leastN) { leastN = usage[p]; leastUsed = p; }
+                palette[leastUsed] = new Color(worstColor.r, worstColor.g, worstColor.b, 1f);
+            }
+        }
+
         // Algisal agirlikli renk uzakligi (goz yesile duyarli): quantize hatalari daha az goze batar
         static float ColorDist(Color a, Color b)
         {
