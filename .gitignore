@@ -80,3 +80,6 @@ Thumbs.db
 # Editor/agent tool caches
 .cursor/
 .utmp/
+
+# GPGS eklentisi kok dizine manifest kopyasi uretir (gercek kopya Assets/Plugins/Android altinda) - yoksay
+/Plugins/
