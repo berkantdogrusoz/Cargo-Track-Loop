@@ -8,6 +8,8 @@ dependencies {
 // Android Resolver Dependencies Start
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4' // Packages/com.google.ads.mobile/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:12
     implementation 'androidx.lifecycle:lifecycle-process:2.6.2' // Packages/com.google.ads.mobile/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:17
+    implementation 'com.android.installreferrer:installreferrer:2.2' // Assets/ColorCargoLoop/Editor/TikTokDependencies.xml:16
+    implementation 'com.github.tiktok:tiktok-business-android-sdk:1.5.0' // Assets/ColorCargoLoop/Editor/TikTokDependencies.xml:14
     // implementation 'com.google.android.gms:play-services-ads:25.3.0' // Packages/com.google.ads.mobile/GoogleMobileAds/Editor/GoogleMobileAdsDependencies.xml:7
     implementation 'com.google.android.gms:play-services-ads:25.4.0' // Assets/ColorCargoLoop/Editor/AdMobDependencies.xml:3
     implementation 'com.google.android.gms:play-services-base:18.10.0' // Assets/Firebase/Editor/AppDependencies.xml:20

@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+  <meta name="ad.orientation" content="portrait,landscape">
+  <meta name="ad.size" content="width=320,height=480">
+  <title>Pixel Pour Playable</title>
+  <script type="text/javascript" src="https://tpc.googlesyndication.com/pagead/gadgets/html5/api/exitapi.js"></script>
+  <style>
+    :root {
+      --ink: #27202f;
+      --panel: #fff7df;
+      --gold: #ffb511;
+      --purple: #4d267a;
+      --sand: #eeba6c;
+    }
+
+    * { box-sizing: border-box; }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: #df994d;
+      color: var(--ink);
+      font-family: Arial, Helvetica, sans-serif;
+      touch-action: manipulation;
+      user-select: none;
+    }
+
+    button { font: inherit; }
+
+    #ad-shell {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      min-width: 280px;
+      min-height: 300px;
+      overflow: hidden;
+      background: #eeb66a url("assets/desert.jpg") center / cover no-repeat;
+      isolation: isolate;
+    }
+
+    #ad-shell::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      background: rgba(255, 231, 181, 0.34);
+    }
+
+    .game {
+      width: min(100%, 430px);
+      height: 100%;
+      margin: 0 auto;
+      padding: max(8px, env(safe-area-inset-top)) 12px max(10px, env(safe-area-inset-bottom));
+      display: grid;
+      grid-template-rows: 38px minmax(0, 1fr) 48px 170px;
+      gap: 7px;
+    }
+
+    .hud {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: center;
+      color: #fff;
+      font-weight: 800;
+      text-shadow: 0 2px 2px rgba(38, 22, 31, 0.55);
+    }
+
+    .pill {
+      min-width: 76px;
+      height: 30px;
+      padding: 0 9px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      background: rgba(57, 38, 58, 0.84);
+      border: 2px solid rgba(255, 255, 255, 0.34);
+      border-radius: 7px;
+      box-shadow: 0 3px 0 rgba(38, 23, 34, 0.3);
+    }
+
+    .pill:last-child { justify-self: end; }
+    .heart { color: #ff4d6d; font-size: 20px; }
+    .coin { color: #ffd437; font-size: 20px; }
+
+    .brand-mini {
+      display: block;
+      width: 112px;
+      max-width: 32vw;
+      height: 34px;
+      object-fit: contain;
+      filter: drop-shadow(0 2px 1px rgba(45, 26, 39, 0.55));
+    }
+
+    .portrait-wrap {
+      min-height: 0;
+      display: grid;
+      place-items: center;
+    }
+
+    .portrait {
+      position: relative;
+      width: min(72vw, 290px);
+      aspect-ratio: 1;
+      max-height: 100%;
+      padding: 13px;
+      background: rgba(255, 248, 224, 0.95);
+      border: 5px solid #6d3da0;
+      border-radius: 8px;
+      box-shadow: 0 7px 0 rgba(70, 37, 92, 0.23), 0 12px 24px rgba(69, 39, 37, 0.2);
+    }
+
+    .portrait::after {
+      content: "";
+      position: absolute;
+      inset: 8px;
+      border: 2px solid rgba(255, 193, 48, 0.55);
+      border-radius: 4px;
+      pointer-events: none;
+    }
+
+    #pixel-board {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      grid-template-columns: repeat(12, 1fr);
+      grid-template-rows: repeat(12, 1fr);
+      gap: 1px;
+    }
+
+    .pixel {
+      min-width: 0;
+      min-height: 0;
+      border-radius: 2px;
+      background: transparent;
+      transition: transform 180ms ease, background-color 180ms ease, opacity 180ms ease;
+    }
+
+    .pixel.ghost {
+      opacity: 0.18;
+      outline: 1px dashed rgba(61, 35, 65, 0.6);
+    }
+
+    .pixel.target {
+      opacity: 0.46;
+      transform: scale(1.14);
+      outline: 2px solid #fff;
+      box-shadow: 0 0 0 2px #ffb511, 0 0 14px rgba(255, 181, 17, 0.85);
+      animation: targetPulse 850ms ease-in-out infinite alternate;
+    }
+
+    .pixel.filled { opacity: 1; }
+
+    @keyframes targetPulse {
+      from { transform: scale(1.02); }
+      to { transform: scale(1.19); }
+    }
+
+    .instruction {
+      align-self: center;
+      text-align: center;
+      color: #fff;
+      font-size: clamp(15px, 4.6vw, 20px);
+      font-weight: 900;
+      text-shadow: 0 2px 2px rgba(59, 35, 39, 0.65);
+    }
+
+    .instruction b {
+      color: #ffe36a;
+    }
+
+    .play-zone {
+      position: relative;
+      display: grid;
+      grid-template-rows: 38px 1fr;
+      gap: 5px;
+    }
+
+    .slots {
+      display: grid;
+      grid-template-columns: repeat(5, 1fr);
+      gap: 7px;
+      padding: 0 4px;
+    }
+
+    .slot {
+      min-width: 0;
+      border-radius: 7px;
+      border: 3px solid rgba(74, 38, 95, 0.72);
+      background: rgba(255, 248, 222, 0.8);
+      box-shadow: 0 3px 0 rgba(76, 45, 66, 0.2);
+    }
+
+    .slot.done {
+      border-color: #ffb511;
+      background: #fff3b8;
+    }
+
+    .pandas {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: 5px 8px;
+      padding: 0 5px;
+    }
+
+    .panda {
+      position: relative;
+      min-width: 0;
+      min-height: 0;
+      padding: 0;
+      border: 0;
+      border-radius: 7px;
+      background: transparent;
+      cursor: pointer;
+      transform: translateZ(0);
+    }
+
+    .panda:active { transform: scale(0.94); }
+
+    .panda img {
+      display: block;
+      width: min(68px, 90%);
+      height: min(68px, 90%);
+      margin: auto;
+      object-fit: contain;
+      filter: drop-shadow(0 4px 2px rgba(45, 28, 33, 0.28));
+    }
+
+    .cube {
+      position: absolute;
+      top: -2px;
+      left: 50%;
+      width: 22px;
+      aspect-ratio: 1;
+      transform: translateX(-50%) rotate(8deg);
+      border: 3px solid rgba(255, 255, 255, 0.9);
+      border-radius: 3px;
+      background: var(--cube);
+      box-shadow: inset -4px -4px 0 rgba(30, 25, 35, 0.16), 0 3px 0 rgba(50, 31, 46, 0.32);
+    }
+
+    .panda.correct {
+      filter: drop-shadow(0 0 8px #ffe25a);
+    }
+
+    .panda.wrong { animation: wrong 300ms ease; }
+
+    @keyframes wrong {
+      25% { transform: translateX(-7px); }
+      75% { transform: translateX(7px); }
+    }
+
+    .hand {
+      position: fixed;
+      z-index: 20;
+      width: 36px;
+      height: 42px;
+      pointer-events: none;
+      font-size: 34px;
+      transform: translate(-4px, 5px) rotate(-16deg);
+      filter: drop-shadow(0 3px 2px rgba(49, 30, 42, 0.38));
+      animation: tap 650ms ease-in-out infinite alternate;
+    }
+
+    @keyframes tap {
+      from { transform: translate(-4px, 2px) rotate(-16deg) scale(1); }
+      to { transform: translate(-4px, 9px) rotate(-16deg) scale(0.9); }
+    }
+
+    .flying-cube {
+      position: fixed;
+      z-index: 40;
+      width: 24px;
+      height: 24px;
+      border: 3px solid #fff;
+      border-radius: 3px;
+      background: var(--cube);
+      box-shadow: inset -4px -4px 0 rgba(40, 20, 35, 0.18), 0 5px 6px rgba(42, 28, 38, 0.28);
+      pointer-events: none;
+    }
+
+    .end-card {
+      position: absolute;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      place-items: center;
+      padding: 22px;
+      background: rgba(40, 20, 48, 0.86);
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 260ms ease;
+    }
+
+    .end-card.show { opacity: 1; visibility: visible; }
+
+    .end-content {
+      width: min(92%, 350px);
+      padding: 22px 18px 18px;
+      text-align: center;
+      border: 4px solid #ffcd38;
+      border-radius: 8px;
+      background: #fff4d0;
+      box-shadow: 0 12px 0 rgba(23, 10, 29, 0.25);
+    }
+
+    .brand {
+      display: block;
+      width: min(260px, 86%);
+      height: auto;
+      margin: 0 auto 10px;
+    }
+
+    .end-content h1 {
+      margin: 0 0 7px;
+      color: #4d267a;
+      font-size: clamp(25px, 8vw, 38px);
+      line-height: 1;
+    }
+
+    .end-content p {
+      margin: 0 0 15px;
+      font-size: 16px;
+      font-weight: 700;
+    }
+
+    .cta {
+      width: 100%;
+      min-height: 52px;
+      border: 0;
+      border-radius: 7px;
+      color: #fff;
+      background: #e85b2c;
+      box-shadow: 0 6px 0 #9f2f18;
+      font-size: 20px;
+      font-weight: 900;
+      cursor: pointer;
+    }
+
+    .cta:active { transform: translateY(4px); box-shadow: 0 2px 0 #9f2f18; }
+
+    @media (orientation: landscape) {
+      .game {
+        width: 100%;
+        max-width: 800px;
+        grid-template-columns: minmax(210px, 42%) 1fr;
+        grid-template-rows: 38px 44px 1fr;
+        column-gap: 16px;
+      }
+
+      .hud { grid-column: 1 / -1; }
+      .portrait-wrap { grid-column: 1; grid-row: 2 / 4; }
+      .portrait { width: min(42vw, calc(100vh - 70px), 300px); }
+      .instruction { grid-column: 2; grid-row: 2; }
+      .play-zone { grid-column: 2; grid-row: 3; min-height: 0; }
+      .pandas { min-height: 120px; }
+    }
+
+    @media (max-height: 540px) and (orientation: portrait) {
+      .game { grid-template-rows: 34px minmax(0, 1fr) 38px 142px; gap: 4px; }
+      .portrait { width: min(60vw, 235px); padding: 10px; }
+      .panda img { width: min(44px, 82%); height: min(44px, 82%); }
+      .cube { width: 15px; border-width: 2px; }
+    }
+  </style>
+</head>
+<body>
+  <main id="ad-shell" aria-label="Pixel Pour oynanabilir reklam">
+    <section class="game">
+      <header class="hud">
+        <div class="pill">LEVEL 1</div>
+        <img class="brand-mini" src="assets/logo.png" alt="Pixel Pour">
+        <div class="pill"><span class="coin">●</span><span id="coins">650</span></div>
+      </header>
+
+      <div class="portrait-wrap">
+        <div class="portrait" aria-label="Tamamlanacak piksel portre">
+          <div id="pixel-board"></div>
+        </div>
+      </div>
+
+      <div class="instruction" id="instruction"><b>Doğru rengi</b> seç, portreyi tamamla!</div>
+
+      <div class="play-zone">
+        <div class="slots" id="slots" aria-hidden="true"></div>
+        <div class="pandas" id="pandas" aria-label="Renk taşıyan pandalar"></div>
+      </div>
+    </section>
+
+    <div class="hand" id="hand" aria-hidden="true">☝</div>
+
+    <section class="end-card" id="end-card" aria-label="Oyunu yükle">
+      <div class="end-content">
+        <img class="brand" src="assets/logo.png" alt="Pixel Pour">
+        <h1>HARİKA!</h1>
+        <p>Binlerce renkli portre seni bekliyor.</p>
+        <button class="cta" id="cta" type="button">ÜCRETSİZ OYNA</button>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      "use strict";
+
+      var palette = {
+        K: "#241b2b",
+        O: "#f2a51f",
+        Y: "#ffe067",
+        R: "#ef4d42",
+        B: "#39a9db",
+        G: "#73c441",
+        W: "#fff9e8"
+      };
+
+      var pattern = [
+        "....KYYK....",
+        "...KYYYYK...",
+        "..KYOYYOYK..",
+        "..KYYYYYYK..",
+        ".KKKRRBBKKK.",
+        ".KORRRBBGOK.",
+        "KOOORRBBGGOK",
+        "KOOOYYGGGGOK",
+        ".KOOYYYYGOK.",
+        "..KOYYYYOK..",
+        "...KOOOO...K",
+        "....KKKK...."
+      ];
+
+      var board = document.getElementById("pixel-board");
+      var pandas = document.getElementById("pandas");
+      var slots = document.getElementById("slots");
+      var hand = document.getElementById("hand");
+      var instruction = document.getElementById("instruction");
+      var coins = document.getElementById("coins");
+      var endCard = document.getElementById("end-card");
+      var goalCells = [];
+      var missing = [];
+      var step = 0;
+      var busy = false;
+      var colors = Object.keys(palette).filter(function (key) { return key !== "W"; });
+
+      pattern.forEach(function (row) {
+        row.split("").forEach(function (code) {
+          var cell = document.createElement("div");
+          cell.className = "pixel";
+          if (code !== ".") {
+            cell.style.backgroundColor = palette[code];
+            cell.dataset.color = code;
+            goalCells.push(cell);
+          }
+          board.appendChild(cell);
+        });
+      });
+
+      var picks = [5, 11, 18, 27, 36, 48, 61, 72];
+      picks.forEach(function (index) {
+        missing.push(goalCells[index % goalCells.length]);
+      });
+
+      goalCells.forEach(function (cell) {
+        if (missing.indexOf(cell) >= 0) cell.classList.add("ghost");
+        else cell.classList.add("filled");
+      });
+
+      for (var s = 0; s < 5; s++) {
+        var slot = document.createElement("div");
+        slot.className = "slot";
+        slots.appendChild(slot);
+      }
+
+      function setPandaColor(button, code) {
+        button.dataset.color = code;
+        button.style.setProperty("--cube", palette[code]);
+        button.setAttribute("aria-label", code + " renkli küp taşıyan panda");
+      }
+
+      function makePanda() {
+        var button = document.createElement("button");
+        button.className = "panda";
+        button.type = "button";
+        button.innerHTML = '<img src="assets/panda.png" alt=""><span class="cube"></span>';
+        button.addEventListener("click", function () { choosePanda(button); });
+        pandas.appendChild(button);
+        return button;
+      }
+
+      var pandaButtons = [];
+      for (var p = 0; p < 6; p++) pandaButtons.push(makePanda());
+
+      function prepareRound() {
+        if (step >= missing.length) {
+          finishGame();
+          return;
+        }
+
+        var wanted = missing[step].dataset.color;
+        pandaButtons.forEach(function (button) {
+          button.classList.remove("correct", "wrong");
+          setPandaColor(button, colors[Math.floor(Math.random() * colors.length)]);
+        });
+
+        var correctIndex = (step * 2 + 1) % pandaButtons.length;
+        setPandaColor(pandaButtons[correctIndex], wanted);
+        pandaButtons[correctIndex].classList.add("correct");
+
+        missing.forEach(function (cell) { cell.classList.remove("target"); });
+        missing[step].classList.add("target");
+        requestAnimationFrame(function () { placeHand(pandaButtons[correctIndex]); });
+      }
+
+      function placeHand(button) {
+        if (endCard.classList.contains("show")) return;
+        var rect = button.getBoundingClientRect();
+        hand.style.left = (rect.left + rect.width * 0.57) + "px";
+        hand.style.top = (rect.top + rect.height * 0.32) + "px";
+      }
+
+      function choosePanda(button) {
+        if (busy || step >= missing.length) return;
+        var target = missing[step];
+        if (button.dataset.color !== target.dataset.color) {
+          button.classList.remove("wrong");
+          void button.offsetWidth;
+          button.classList.add("wrong");
+          instruction.innerHTML = "Bu renk değil, <b>parlayan pandayı</b> seç!";
+          return;
+        }
+
+        busy = true;
+        hand.style.display = "none";
+        instruction.innerHTML = "Süper! <b>Küp portreye gidiyor.</b>";
+        flyCube(button, target, function () {
+          target.classList.remove("ghost", "target");
+          target.classList.add("filled");
+          step++;
+          coins.textContent = String(650 + step * 10);
+          updateSlots();
+          busy = false;
+          if (step < missing.length) {
+            hand.style.display = "block";
+            instruction.innerHTML = "<b>Doğru rengi</b> seç, portreyi tamamla!";
+          }
+          prepareRound();
+        });
+      }
+
+      function flyCube(button, target, done) {
+        var from = button.querySelector(".cube").getBoundingClientRect();
+        var to = target.getBoundingClientRect();
+        var cube = document.createElement("div");
+        cube.className = "flying-cube";
+        cube.style.setProperty("--cube", palette[button.dataset.color]);
+        cube.style.left = from.left + "px";
+        cube.style.top = from.top + "px";
+        document.body.appendChild(cube);
+
+        var dx = to.left + to.width / 2 - (from.left + from.width / 2);
+        var dy = to.top + to.height / 2 - (from.top + from.height / 2);
+        var animation = cube.animate([
+          { transform: "translate(0,0) rotate(0deg) scale(1)" },
+          { transform: "translate(" + (dx * 0.48) + "px," + (dy * 0.3 - 55) + "px) rotate(160deg) scale(1.35)", offset: 0.52 },
+          { transform: "translate(" + dx + "px," + dy + "px) rotate(300deg) scale(0.55)" }
+        ], { duration: 520, easing: "cubic-bezier(.2,.72,.22,1)" });
+
+        animation.onfinish = function () {
+          cube.remove();
+          done();
+        };
+      }
+
+      function updateSlots() {
+        Array.prototype.forEach.call(slots.children, function (slot, index) {
+          slot.classList.toggle("done", index < Math.min(5, Math.ceil(step * 5 / missing.length)));
+        });
+      }
+
+      function finishGame() {
+        hand.style.display = "none";
+        instruction.innerHTML = "Portre tamamlandı!";
+        setTimeout(function () { endCard.classList.add("show"); }, 450);
+      }
+
+      function exitGame() {
+        if (window.ExitApi && typeof window.ExitApi.exit === "function") {
+          window.ExitApi.exit();
+        } else {
+          window.open("https://play.google.com/store/apps/details?id=com.Altare.CandyCargo", "_blank");
+        }
+      }
+
+      document.getElementById("cta").addEventListener("click", exitGame);
+      window.addEventListener("resize", function () {
+        var current = document.querySelector(".panda.correct");
+        if (current) placeHand(current);
+      });
+
+      updateSlots();
+      prepareRound();
+    }());
+  </script>
+</body>
+</html>

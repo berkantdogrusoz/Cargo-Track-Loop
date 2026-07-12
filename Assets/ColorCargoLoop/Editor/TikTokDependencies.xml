@@ -1,0 +1,18 @@
+<dependencies>
+  <!--
+    TikTok Business (Events) SDK - UA reklam algoritmasi icin install/launch/olay takibi.
+    EDM4U (External Dependency Manager) bunu jitpack'ten cozer ve mainTemplate/settings gradle'a
+    otomatik enjekte eder (Assets > External Dependency Manager > Android Resolver > Resolve).
+    NOT: lifecycle-process zaten GMA'dan geliyor (2.6.2 >= TikTok'un istedigi 2.3.1) - tekrar eklemiyoruz.
+    App Secret client'a KONMAZ (o sadece sunucu Events API icin); istemci sadece App ID + TT App ID kullanir.
+  -->
+  <androidPackages>
+    <androidPackage spec="com.github.tiktok:tiktok-business-android-sdk:1.5.0">
+      <repositories>
+        <repository>https://jitpack.io</repository>
+      </repositories>
+    </androidPackage>
+    <!-- Google Play install referrer: kurulum kaynagi/attribution icin -->
+    <androidPackage spec="com.android.installreferrer:installreferrer:2.2" />
+  </androidPackages>
+</dependencies>

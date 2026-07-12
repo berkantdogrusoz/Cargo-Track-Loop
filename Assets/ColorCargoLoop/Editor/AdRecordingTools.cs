@@ -110,96 +110,90 @@ namespace ColorCargoLoop
         const float RichGreedyDist = 0.085f;  // ilk kumeleme esigi (kucuk = daha cok ton ayrimi)
         const float RichMergeDist = 0.105f;   // son birlestirme esigi (benzer tonlar yine tek grup)
 
-        [MenuItem("Color Cargo Loop/Reklam/Potreleri Yeniden Cevir (zengin renk, 12'ye kadar)")]
-        static void ReconvertPortraitsRich()
+        [MenuItem("Color Cargo Loop/Reklam/Potrelerin Tumunu Sadik Renkle Yeniden Cevir")]
+        public static void ReconvertPortraitsRich()
         {
-            // ILK 10 LEVEL sirasi (level 1..10). Yeni potre eklenince buraya yaz; arac sirayi da kurar.
-            // 12 Tem: Anubis/Misir temali yeni potreler (1..10.png) - col temasina uygun, ilk 10 level bunlar.
-            string[] names = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };
-            var set = AssetDatabase.LoadAssetAtPath<ArrowsPixelPortraitSet>("Assets/Art/Portraits/PortraitSet.asset");
-            if (set == null) { Debug.LogError("[ZenginCevirim] PortraitSet.asset yok!"); return; }
-            char[] slots = { 'P', 'B', 'Y', 'G', 'U', 'O', 'K', 'C', 'T', 'L', 'W', 'N' };
+            const string setPath = "Assets/Art/Portraits/PortraitSet.asset";
+            var set = AssetDatabase.LoadAssetAtPath<ArrowsPixelPortraitSet>(setPath);
+            if (set == null || !set.HasPortraits)
+            {
+                Debug.LogError("[SadikCevirim] PortraitSet yok veya bos: " + setPath);
+                return;
+            }
+
+            var entries = new System.Collections.Generic.List<ArrowsPixelPortraitSet.Entry>();
+            foreach (var entry in set.portraits)
+                if (entry != null) entries.Add(entry);
+
+            int processed = 0;
             var report = new System.Text.StringBuilder();
-            report.AppendLine("=== ZENGIN RENK CEVIRIMI === greedy=" + RichGreedyDist + " merge=" + RichMergeDist);
+            report.AppendLine("=== SADIK RENK CEVIRIMI === mevcut PortraitSet, 56x56, max 12 renk");
 
-            foreach (string nm in names)
+            foreach (var entry in entries)
             {
-                string path = "Assets/Art/Portraits/" + nm + ".png";
-                var ti = AssetImporter.GetAtPath(path) as TextureImporter;
-                if (ti == null) { report.AppendLine(nm + ": PNG yok, atlandi"); continue; }
-                if (!ti.isReadable || ti.textureCompression != TextureImporterCompression.Uncompressed || ti.mipmapEnabled || ti.maxTextureSize < 2048)
+                string path = entry.sourceTexture != null ? AssetDatabase.GetAssetPath(entry.sourceTexture) : null;
+                if (string.IsNullOrEmpty(path))
                 {
-                    ti.isReadable = true; ti.textureCompression = TextureImporterCompression.Uncompressed;
-                    ti.npotScale = TextureImporterNPOTScale.None; ti.mipmapEnabled = false;
-                    ti.filterMode = FilterMode.Bilinear; ti.maxTextureSize = 2048;
-                    ti.SaveAndReimport();
+                    report.AppendLine(entry.name + ": kaynak texture referansi yok, atlandi");
+                    continue;
                 }
-                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-                if (tex == null) { report.AppendLine(nm + ": texture yuklenemedi"); continue; }
-                var entry = set.portraits.Find(e => e != null && e.name == nm);
-                if (entry == null) { entry = new ArrowsPixelPortraitSet.Entry(); entry.name = nm; set.portraits.Add(entry); }
 
-                // Eski ConvertSharp paleti satir satir kuruyordu: ustteki siyah/altin tonlar
-                // 12 slotu doldurunca daha sonra gelen beyaz goz gibi renkler palette yer bulamiyordu.
-                // HD adaptive yol once TUM resmi gorur, sonra paleti cikarir ve nadir detaylari korur.
-                Color[] pal;
-                string[] rows = PortraitImporter.ConvertTextureAdaptive(path, 56, 12, false, 0f, out pal);
-                string line;
-                if (rows != null)
+                var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+                if (importer == null)
                 {
-                    entry.rows = rows;
-                    entry.palette = pal;
-                    entry.sourceTexture = tex;
-                    int cubes = 0; foreach (var r in rows) foreach (var c in r) if (c != '.') cubes++;
-                    entry.preview = string.Join("\n", rows) + "\n[HD sadik cevirim: " + pal.Length + " renk, " + cubes + " kup, arka plan bos]";
-                    line = rows[0].Length + "x" + rows.Length + ", " + pal.Length + " renk, " + cubes + " kup";
+                    report.AppendLine(entry.name + ": texture importer bulunamadi (" + path + ")");
+                    continue;
                 }
-                else line = "HD adaptive cevirim basarisiz";
-                report.AppendLine(nm + ": " + line);
-            }
 
-            // Ilk 10 SIRAYI garanti et: names sirasi = level 1..10 (kalanlar mevcut goreli sirada arkada)
-            var head = new System.Collections.Generic.List<ArrowsPixelPortraitSet.Entry>();
-            foreach (string nm in names)
-            {
-                var e = set.portraits.Find(p => p != null && p.name == nm);
-                if (e != null) head.Add(e);
+                Color[] palette;
+                string[] rows = PortraitImporter.ConvertTextureAdaptive(path, 56, 12, false, 0f, out palette);
+                var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                if (texture == null || rows == null || rows.Length == 0)
+                {
+                    report.AppendLine(entry.name + ": HD adaptive cevirim basarisiz (" + path + ")");
+                    continue;
+                }
+
+                entry.rows = rows;
+                entry.palette = palette;
+                entry.sourceTexture = texture;
+                int cubes = 0;
+                foreach (string row in rows)
+                    foreach (char cell in row)
+                        if (cell != '.') cubes++;
+                entry.preview = string.Join("\n", rows) + "\n[HD sadik cevirim: " + palette.Length +
+                    " renk, " + cubes + " kup, arka plan bos]";
+                processed++;
+                report.AppendLine(entry.name + ": " + rows[0].Length + "x" + rows.Length + ", " +
+                    palette.Length + " renk, " + cubes + " kup");
             }
-            var tail = new System.Collections.Generic.List<ArrowsPixelPortraitSet.Entry>();
-            foreach (var e in set.portraits) { if (e != null && !head.Contains(e)) tail.Add(e); }
-            set.portraits.Clear();
-            set.portraits.AddRange(head);
-            set.portraits.AddRange(tail);
 
             EditorUtility.SetDirty(set);
             AssetDatabase.SaveAssets();
 
-            // Sahnedeki reklam listesini (adPortraitNames) YENI potre sirasina (names) ESITLE, sahneyi kaydet.
-            // Reklam videosu artik yeni Misir potrelerini gosterir; Inspector'dan sirayi/alt kumeyi degistirebilirsin.
+            // Reklam modu ilk 10 PortraitSet kaydini kullanir; level sirasi degismez.
             var game = Object.FindObjectOfType<ArrowsPixelGame>();
             if (game != null)
             {
-                var so = new SerializedObject(game);
-                var prop = so.FindProperty("adPortraitNames");
-                if (prop != null && prop.isArray)
+                var serializedGame = new SerializedObject(game);
+                var namesProperty = serializedGame.FindProperty("adPortraitNames");
+                if (namesProperty != null && namesProperty.isArray)
                 {
-                    prop.ClearArray();
-                    for (int i = 0; i < names.Length; i++)
-                    {
-                        prop.InsertArrayElementAtIndex(i);
-                        prop.GetArrayElementAtIndex(i).stringValue = names[i];
-                    }
-                    so.ApplyModifiedProperties();
+                    int adCount = Mathf.Min(10, entries.Count);
+                    namesProperty.arraySize = adCount;
+                    for (int i = 0; i < adCount; i++)
+                        namesProperty.GetArrayElementAtIndex(i).stringValue = entries[i].name;
+                    serializedGame.ApplyModifiedProperties();
                     UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(game.gameObject.scene);
                     UnityEditor.SceneManagement.EditorSceneManager.SaveOpenScenes();
-                    Debug.Log("[ZenginCevirim] adPortraitNames = yeni sira (" + string.Join(", ", names) + ")");
                 }
             }
 
-            Debug.Log(report.ToString());
-            RenderPreviewStrip(set, names, slots);
+            if (processed != entries.Count)
+                Debug.LogError("[SadikCevirim] Eksik donusum: " + processed + "/" + entries.Count + "\n" + report);
+            else
+                Debug.Log("[SadikCevirim] Tum portreler tamam: " + processed + "/" + entries.Count + "\n" + report);
         }
-
         // Kup derz tespiti + merkez ornekleme + ince kumeleme. true = basarili.
         static bool ConvertSharp(Texture2D tex, char[] slots, out string[] outRows, out Color[] outPal, out string info)
         {

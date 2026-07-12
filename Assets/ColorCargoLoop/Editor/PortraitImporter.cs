@@ -232,24 +232,56 @@ namespace ColorCargoLoop
         {
             palette = null;
             var importer = AssetImporter.GetAtPath(path) as TextureImporter;
+            bool restoreImporter = false;
+            bool originalReadable = false;
+            TextureImporterCompression originalCompression = TextureImporterCompression.Compressed;
+            TextureImporterNPOTScale originalNpot = TextureImporterNPOTScale.ToNearest;
+            bool originalMipmaps = false;
+            FilterMode originalFilter = FilterMode.Bilinear;
+            int originalMaxSize = 2048;
             if (importer != null)
             {
+                originalReadable = importer.isReadable;
+                originalCompression = importer.textureCompression;
+                originalNpot = importer.npotScale;
+                originalMipmaps = importer.mipmapEnabled;
+                originalFilter = importer.filterMode;
+                originalMaxSize = importer.maxTextureSize;
                 bool need = !importer.isReadable || importer.textureCompression != TextureImporterCompression.Uncompressed
                     || importer.npotScale != TextureImporterNPOTScale.None || importer.mipmapEnabled || importer.maxTextureSize < 2048 || importer.filterMode != FilterMode.Bilinear;
                 if (need)
                 {
+                    restoreImporter = true;
                     importer.isReadable = true; importer.textureCompression = TextureImporterCompression.Uncompressed;
                     importer.npotScale = TextureImporterNPOTScale.None; importer.mipmapEnabled = false;
                     importer.filterMode = FilterMode.Bilinear; importer.maxTextureSize = 2048; importer.SaveAndReimport();
                 }
             }
             var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
-            if (tex == null) return null;
+            if (tex == null)
+            {
+                RestoreImporter();
+                return null;
+            }
             int sw = tex.width, sh = tex.height;
+            Color[] src = tex.GetPixels();
+            RestoreImporter();
             int th = Mathf.Clamp(targetHeight, 8, 64);
             int tw = Mathf.Max(4, Mathf.RoundToInt((float)sw / sh * th));
             tw = Mathf.Min(tw, Mathf.RoundToInt(th * 1.1f)); // kare serbest; asiri yatay tasmasin
-            Color[] src = tex.GetPixels();
+
+            void RestoreImporter()
+            {
+                if (!restoreImporter || importer == null) return;
+                importer.isReadable = originalReadable;
+                importer.textureCompression = originalCompression;
+                importer.npotScale = originalNpot;
+                importer.mipmapEnabled = originalMipmaps;
+                importer.filterMode = originalFilter;
+                importer.maxTextureSize = originalMaxSize;
+                importer.SaveAndReimport();
+                restoreImporter = false;
+            }
 
             // 1) her hucre rengi: box-filter + hafif canlandirma
             Color[,] cell = new Color[th, tw];
