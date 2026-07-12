@@ -12,7 +12,7 @@ namespace ColorCargoLoop
     public static class AdRecordingTools
     {
         // Level 11-30 arasindaki potre sirasini rastgele karistirir (Fisher-Yates).
-        // Ilk 10 (mantar..morkalp) ve 30 sonrasi DOKUNULMAZ. Her tiklama yeni bir karisim.
+        // Ilk 10 (1..10 Misir potreleri) ve 30 sonrasi DOKUNULMAZ. Her tiklama yeni bir karisim.
         [MenuItem("Color Cargo Loop/Level 11-30 Potrelerini Karistir (rastgele)")]
         static void ShuffleLevels10to30()
         {
@@ -33,6 +33,60 @@ namespace ColorCargoLoop
             var sb = new System.Text.StringBuilder("[Karistir] Yeni sira (level 10-30): ");
             for (int i = from; i <= to; i++) sb.Append((i + 1) + ":" + (set.portraits[i] != null ? set.portraits[i].name : "?") + "  ");
             Debug.Log(sb.ToString());
+        }
+
+        // ============================================================
+        // OGRETICI TESTI: tum ogretme anlarini LEVEL 1'de pespese test etmek icin.
+        // KUR: PlayerPrefs sifirlanir (tutorial+tipler gelir), esikler level 1'e cekilir,
+        //      donma sansi yukseltilir, reklam modu KAPATILIR (ogreticiler reklam modunda cikmaz).
+        //      Onceki degerler EditorPrefs'e saklanir. GERI AL: aynen geri yukler.
+        // ============================================================
+        [MenuItem("Color Cargo Loop/Test/Ogretici Testini KUR (level 1)")]
+        static void SetupTutorialTest()
+        {
+            var game = Object.FindObjectOfType<ArrowsPixelGame>();
+            if (game == null) { Debug.LogError("[Test] Sahnede ArrowsPixelGame yok."); return; }
+            var so = new SerializedObject(game);
+
+            // onceki degerleri sakla
+            EditorPrefs.SetInt("ccl_test_adMode", so.FindProperty("adRecordingMode").boolValue ? 1 : 0);
+            EditorPrefs.SetInt("ccl_test_fpTip", so.FindProperty("firePandaTipLevel").intValue);
+            EditorPrefs.SetInt("ccl_test_slotTip", so.FindProperty("extraSlotTipLevel").intValue);
+            EditorPrefs.SetInt("ccl_test_frLvl", so.FindProperty("freezeFromLevel").intValue);
+            EditorPrefs.SetFloat("ccl_test_frCh", so.FindProperty("freezeChance").floatValue);
+            EditorPrefs.SetInt("ccl_test_saved", 1);
+
+            // test degerleri
+            so.FindProperty("adRecordingMode").boolValue = false; // ogreticiler gorunsun
+            so.FindProperty("firePandaTipLevel").intValue = 1;    // dev kup tanitimi level 1
+            so.FindProperty("extraSlotTipLevel").intValue = 1;    // dev kupun hemen ardindan level 1
+            so.FindProperty("freezeFromLevel").intValue = 1;      // donma level 1'den itibaren
+            so.FindProperty("freezeChance").floatValue = 0.5f;    // sik donsun (test)
+            so.ApplyModifiedProperties();
+
+            PlayerPrefs.DeleteAll();
+            PlayerPrefs.Save();
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(game.gameObject.scene);
+            Debug.Log("[Test] OGRETICI TESTI HAZIR: Play'e bas. Sira: hikaye tutoriali -> el ilk pandayi gosterir -> dev kup balonu -> panda gonder (yuksek sans donma) -> cekic ogreticisi. Ardindan ekstra slot balonu. Bitince 'Ogretici Testini GERI AL'.");
+        }
+
+        [MenuItem("Color Cargo Loop/Test/Ogretici Testini GERI AL")]
+        static void RestoreTutorialTest()
+        {
+            if (EditorPrefs.GetInt("ccl_test_saved", 0) != 1) { Debug.LogWarning("[Test] Saklanmis deger yok (once KUR calistirilmali)."); return; }
+            var game = Object.FindObjectOfType<ArrowsPixelGame>();
+            if (game == null) { Debug.LogError("[Test] Sahnede ArrowsPixelGame yok."); return; }
+            var so = new SerializedObject(game);
+            so.FindProperty("adRecordingMode").boolValue = EditorPrefs.GetInt("ccl_test_adMode", 0) == 1;
+            so.FindProperty("firePandaTipLevel").intValue = EditorPrefs.GetInt("ccl_test_fpTip", 1);
+            so.FindProperty("extraSlotTipLevel").intValue = EditorPrefs.GetInt("ccl_test_slotTip", 1);
+            so.FindProperty("freezeFromLevel").intValue = EditorPrefs.GetInt("ccl_test_frLvl", 4);
+            so.FindProperty("freezeChance").floatValue = EditorPrefs.GetFloat("ccl_test_frCh", 0.05f);
+            so.ApplyModifiedProperties();
+            EditorPrefs.SetInt("ccl_test_saved", 0);
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(game.gameObject.scene);
+            UnityEditor.SceneManagement.EditorSceneManager.SaveOpenScenes();
+            Debug.Log("[Test] Degerler GERI YUKLENDI ve sahne kaydedildi (adRecordingMode=" + (EditorPrefs.GetInt("ccl_test_adMode", 0) == 1) + ", tipler=" + EditorPrefs.GetInt("ccl_test_fpTip", 1) + "/" + EditorPrefs.GetInt("ccl_test_slotTip", 1) + ", donma=" + EditorPrefs.GetInt("ccl_test_frLvl", 4) + ").");
         }
 
         [MenuItem("Color Cargo Loop/Reklam/PlayerPrefs Sifirla (fresh install)")]
@@ -60,7 +114,8 @@ namespace ColorCargoLoop
         static void ReconvertPortraitsRich()
         {
             // ILK 10 LEVEL sirasi (level 1..10). Yeni potre eklenince buraya yaz; arac sirayi da kurar.
-            string[] names = { "mantar", "yildiz", "cicek", "hediye", "kamera", "araba", "roket", "tac", "dondurma", "morkalp" };
+            // 12 Tem: Anubis/Misir temali yeni potreler (1..10.png) - col temasina uygun, ilk 10 level bunlar.
+            string[] names = { "1", "2", "3", "4", "5", "6", "7", "8", "9", "10" };
             var set = AssetDatabase.LoadAssetAtPath<ArrowsPixelPortraitSet>("Assets/Art/Portraits/PortraitSet.asset");
             if (set == null) { Debug.LogError("[ZenginCevirim] PortraitSet.asset yok!"); return; }
             char[] slots = { 'P', 'B', 'Y', 'G', 'U', 'O', 'K', 'C', 'T', 'L', 'W', 'N' };
@@ -81,17 +136,25 @@ namespace ColorCargoLoop
                 }
                 var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
                 if (tex == null) { report.AppendLine(nm + ": texture yuklenemedi"); continue; }
-                string line;
                 var entry = set.portraits.Find(e => e != null && e.name == nm);
                 if (entry == null) { entry = new ArrowsPixelPortraitSet.Entry(); entry.name = nm; set.portraits.Add(entry); }
-                if (ConvertSharp(tex, slots, out string[] rows, out Color[] pal, out line))
+
+                // Eski ConvertSharp paleti satir satir kuruyordu: ustteki siyah/altin tonlar
+                // 12 slotu doldurunca daha sonra gelen beyaz goz gibi renkler palette yer bulamiyordu.
+                // HD adaptive yol once TUM resmi gorur, sonra paleti cikarir ve nadir detaylari korur.
+                Color[] pal;
+                string[] rows = PortraitImporter.ConvertTextureAdaptive(path, 56, 12, false, 0f, out pal);
+                string line;
+                if (rows != null)
                 {
                     entry.rows = rows;
                     entry.palette = pal;
                     entry.sourceTexture = tex;
                     int cubes = 0; foreach (var r in rows) foreach (var c in r) if (c != '.') cubes++;
-                    entry.preview = string.Join("\n", rows) + "\n[KESKIN zengin cevirim: " + pal.Length + " renk, " + cubes + " kup, arka plan bos]";
+                    entry.preview = string.Join("\n", rows) + "\n[HD sadik cevirim: " + pal.Length + " renk, " + cubes + " kup, arka plan bos]";
+                    line = rows[0].Length + "x" + rows.Length + ", " + pal.Length + " renk, " + cubes + " kup";
                 }
+                else line = "HD adaptive cevirim basarisiz";
                 report.AppendLine(nm + ": " + line);
             }
 
@@ -111,7 +174,8 @@ namespace ColorCargoLoop
             EditorUtility.SetDirty(set);
             AssetDatabase.SaveAssets();
 
-            // Sahnedeki reklam listesine (adPortraitNames) eksik isimleri EKLE (mevcut sira bozulmaz), sahneyi kaydet
+            // Sahnedeki reklam listesini (adPortraitNames) YENI potre sirasina (names) ESITLE, sahneyi kaydet.
+            // Reklam videosu artik yeni Misir potrelerini gosterir; Inspector'dan sirayi/alt kumeyi degistirebilirsin.
             var game = Object.FindObjectOfType<ArrowsPixelGame>();
             if (game != null)
             {
@@ -119,23 +183,16 @@ namespace ColorCargoLoop
                 var prop = so.FindProperty("adPortraitNames");
                 if (prop != null && prop.isArray)
                 {
-                    var existing = new System.Collections.Generic.HashSet<string>();
-                    for (int i = 0; i < prop.arraySize; i++) existing.Add(prop.GetArrayElementAtIndex(i).stringValue);
-                    bool changed = false;
-                    foreach (string nm in names)
+                    prop.ClearArray();
+                    for (int i = 0; i < names.Length; i++)
                     {
-                        if (existing.Contains(nm)) continue;
-                        prop.InsertArrayElementAtIndex(prop.arraySize);
-                        prop.GetArrayElementAtIndex(prop.arraySize - 1).stringValue = nm;
-                        changed = true;
-                        Debug.Log("[ZenginCevirim] adPortraitNames'e eklendi: " + nm);
+                        prop.InsertArrayElementAtIndex(i);
+                        prop.GetArrayElementAtIndex(i).stringValue = names[i];
                     }
-                    if (changed)
-                    {
-                        so.ApplyModifiedProperties();
-                        UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(game.gameObject.scene);
-                        UnityEditor.SceneManagement.EditorSceneManager.SaveOpenScenes();
-                    }
+                    so.ApplyModifiedProperties();
+                    UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(game.gameObject.scene);
+                    UnityEditor.SceneManagement.EditorSceneManager.SaveOpenScenes();
+                    Debug.Log("[ZenginCevirim] adPortraitNames = yeni sira (" + string.Join(", ", names) + ")");
                 }
             }
 
@@ -238,8 +295,12 @@ namespace ColorCargoLoop
                     cellSlot[ry, rx] = -1;
                     int ix = Mathf.Clamp(Mathf.RoundToInt(minX + (rx + 0.5f) * pitchF), 0, sw - 1);
                     int iy = Mathf.Clamp(Mathf.RoundToInt(minY + bh - (ry + 0.5f) * pitchYF), 0, sh - 1);
-                    Color c = src[iy * sw + ix];
-                    if (c.a < 0.5f) continue;
+                    // MEDYAN ORNEKLEME: tek merkez piksel yerine hucre ic bolgesinin luminans-medyani ->
+                    // boncuk speküler parlamasi (parlak nokta) ve aradaki koyu derz OUTLIER olarak atlanir,
+                    // gercek boncuk rengi gelir (siyah govdedeki altin serpisti + gri bulaniklik biter).
+                    bool solid;
+                    Color c = SampleBeadMedian(src, sw, sh, ix, iy, pitchF, pitchYF, out solid);
+                    if (!solid) continue;
                     c.a = 1f; // KIRLI ALPHA GIRMESIN (toon/transparan yolunu bozuyordu)
                     int best = -1; float bestD = greedy2;
                     for (int k = 0; k < clusters.Count; k++)
@@ -308,6 +369,35 @@ namespace ColorCargoLoop
             outPal = merged.ToArray();
             info = colsF + "x" + rowsF + " art (derz " + pitchPx + "px) -> x" + scale + " = " + W + "x" + H + ", " + merged.Count + " renk, " + cubes + " kup";
             return true;
+        }
+
+        // Bir boncuk hucresinin RENGINI robust olarak orneklor: merkez cevresi ~%30 patch, opak
+        // pikselleri luminansa gore siralar, MEDYAN pikselin rengini dondur. Boylece parlak speküler
+        // nokta (en ust) ve koyu derz (en alt) outlier kalir, boncuk govde rengi secilir.
+        static Color SampleBeadMedian(Color[] src, int sw, int sh, int cx, int cy, float pitchX, float pitchY, out bool solid)
+        {
+            int rx = Mathf.Max(1, Mathf.RoundToInt(pitchX * 0.30f));
+            int ry = Mathf.Max(1, Mathf.RoundToInt(pitchY * 0.30f));
+            var cols = new System.Collections.Generic.List<Color>();
+            var lum = new System.Collections.Generic.List<float>();
+            int total = 0, opaque = 0;
+            for (int yy = cy - ry; yy <= cy + ry; yy++)
+                for (int xx = cx - rx; xx <= cx + rx; xx++)
+                {
+                    if (xx < 0 || xx >= sw || yy < 0 || yy >= sh) continue;
+                    total++;
+                    Color c = src[yy * sw + xx];
+                    if (c.a < 0.5f) continue;
+                    opaque++;
+                    cols.Add(c);
+                    lum.Add(0.299f * c.r + 0.587f * c.g + 0.114f * c.b);
+                }
+            solid = cols.Count > 0 && opaque >= Mathf.Max(1, total / 3); // hucrenin >=1/3'u opak -> dolu (kenar anti-alias'i eleme)
+            if (cols.Count == 0) return Color.clear;
+            var idx = new int[cols.Count];
+            for (int i = 0; i < idx.Length; i++) idx[i] = i;
+            System.Array.Sort(idx, (a, b) => lum[a].CompareTo(lum[b]));
+            return cols[idx[idx.Length / 2]]; // luminans-medyan pixelin rengi
         }
 
         // Onizleme seridi: 9 potreyi yanyana PNG'ye cizer (gorsel kontrol icin)

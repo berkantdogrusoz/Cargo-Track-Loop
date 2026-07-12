@@ -1,9 +1,11 @@
 // =============================================================================
-// AltareAnalytics.cs  —  v2.3.0
+// AltareAnalytics.cs  —  v2.4.0
 // -----------------------------------------------------------------------------
 // Drop-in Unity client for the Altare AI Live Game Intelligence platform.
 //
-// v2.3 highlights:
+// v2.4 highlights:
+//   - Uses a named secondary FirebaseApp for the Altare backend; the game's
+//     own google-services.json, Analytics, Remote Config and Crashlytics stay untouched.
 //   - Memory pressure tracking (memory_warning when low/anomalous)
 //   - ANR (Android Not Responding) detection via main-thread heartbeat
 //   - GPU model + RAM fingerprinting per event (deviceParams)
@@ -103,8 +105,16 @@ namespace Altare.Analytics
         public static string PlayerAnonId => _instance != null ? _instance._playerAnonId : null;
         public static string GameId => _instance != null ? _instance._gameId : null;
         public static bool IsHealthy => _instance != null && _instance._ready && !_instance._circuitOpen;
+        public static FirebaseApp BackendApp => _instance != null ? _instance._firebaseApp : null;
+        public static FirebaseFirestore Firestore => _instance != null ? _instance._db : null;
 
         private const string PrefsPlayerIdKey = "altare.playerAnonId";
+        private const string AltareFirebaseAppName = "AltareAnalyticsBackend";
+        private const string AltareFirebaseApiKey = "AIzaSyDxHVD9iGm0WzPVDHvC0zRpvLBwhmVPdXs";
+        private const string AltareFirebaseAppId = "1:525350962277:web:8afd370efeafb936f4328c";
+        private const string AltareFirebaseProjectId = "altare-312a1";
+        private const string AltareFirebaseSenderId = "525350962277";
+        private const string AltareFirebaseStorageBucket = "altare-312a1.firebasestorage.app";
 
         private static AltareAnalytics _instance;
 
@@ -119,6 +129,7 @@ namespace Altare.Analytics
         private long _totalMemoryMb;
         private bool _isFirstOpen;
 
+        private FirebaseApp _firebaseApp;
         private FirebaseFirestore _db;
         private bool _ready;
         private bool _initFailed;
@@ -176,26 +187,42 @@ namespace Altare.Analytics
 
             FirebaseApp.CheckAndFixDependenciesAsync().ContinueWithOnMainThread(task =>
             {
-                if (task.Result != DependencyStatus.Available)
+                if (task.IsFaulted || task.IsCanceled || task.Result != DependencyStatus.Available)
                 {
                     _initFailed = true;
-                    Debug.LogWarning("[Altare] Firebase deps unavailable: " + task.Result + " — SDK disabled, game continues.");
+                    string status = task.IsFaulted ? task.Exception?.GetBaseException()?.Message
+                                  : (task.IsCanceled ? "canceled" : task.Result.ToString());
+                    Debug.LogWarning("[Altare] Firebase deps unavailable: " + status + " - SDK disabled, game continues.");
                     TripCircuit("firebase_deps");
                     return;
                 }
-                FirebaseAuth.DefaultInstance.SignInAnonymouslyAsync()
+
+                try
+                {
+                    _firebaseApp = GetOrCreateAltareFirebaseApp();
+                }
+                catch (Exception e)
+                {
+                    _initFailed = true;
+                    Debug.LogWarning("[Altare] Backend Firebase app init failed - SDK disabled: " + e.Message);
+                    TripCircuit("backend_app");
+                    return;
+                }
+
+                FirebaseAuth.GetAuth(_firebaseApp).SignInAnonymouslyAsync()
                     .ContinueWithOnMainThread(authTask =>
                     {
                         if (authTask.IsFaulted || authTask.IsCanceled)
                         {
                             _initFailed = true;
-                            Debug.LogWarning("[Altare] Anonymous auth failed — SDK disabled, game continues.");
+                            Debug.LogWarning("[Altare] Anonymous auth failed - SDK disabled, game continues.");
                             TripCircuit("auth");
                             return;
                         }
-                        _db = FirebaseFirestore.DefaultInstance;
+                        _db = FirebaseFirestore.GetInstance(_firebaseApp);
                         _ready = true;
-                        Debug.Log("[Altare] Ready. gameId=" + _gameId
+                        Debug.Log("[Altare] Ready. project=" + AltareFirebaseProjectId
+                                  + " gameId=" + _gameId
                                   + " playerAnonId=" + _playerAnonId
                                   + " sessionId=" + _sessionId);
                         if (_isFirstOpen)
@@ -209,6 +236,29 @@ namespace Altare.Analytics
                         FlushBuffer();
                     });
             });
+        }
+
+        private static FirebaseApp GetOrCreateAltareFirebaseApp()
+        {
+            try
+            {
+                FirebaseApp existing = FirebaseApp.GetInstance(AltareFirebaseAppName);
+                if (existing != null) return existing;
+            }
+            catch (Exception)
+            {
+                // Named app does not exist yet.
+            }
+
+            var options = new AppOptions
+            {
+                ApiKey = AltareFirebaseApiKey,
+                AppId = AltareFirebaseAppId,
+                ProjectId = AltareFirebaseProjectId,
+                MessageSenderId = AltareFirebaseSenderId,
+                StorageBucket = AltareFirebaseStorageBucket,
+            };
+            return FirebaseApp.Create(options, AltareFirebaseAppName);
         }
 
         private void TripCircuit(string reason)

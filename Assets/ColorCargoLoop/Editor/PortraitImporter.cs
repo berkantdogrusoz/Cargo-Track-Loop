@@ -228,7 +228,7 @@ namespace ColorCargoLoop
             Selection.activeObject = set;
         }
 
-        static string[] ConvertTextureAdaptive(string path, int targetHeight, int colorCount, bool removeBg, float vivid, out Color[] palette)
+        internal static string[] ConvertTextureAdaptive(string path, int targetHeight, int colorCount, bool removeBg, float vivid, out Color[] palette)
         {
             palette = null;
             var importer = AssetImporter.GetAtPath(path) as TextureImporter;
@@ -328,36 +328,60 @@ namespace ColorCargoLoop
 
         static Color SampleCellColorPreserveDetail(Color[] src, int sw, int sx0, int sx1, int sy0, int sy1, out float alpha)
         {
-            float ar = 0f, ag = 0f, ab = 0f, aa = 0f;
-            int cnt = 0;
+            // Tek bir en-aykiri/en-doygun pikseli secmek goz, parlama ve kenarlarda resimde olmayan
+            // renkler uretiyordu. Opak piksellerin kanal-bazli kirpilmis ortalamasi, uc parlama ve
+            // koyu derzi atar; hucrenin gercek baskin rengini korur.
+            var rr = new System.Collections.Generic.List<float>();
+            var gg = new System.Collections.Generic.List<float>();
+            var bb = new System.Collections.Generic.List<float>();
+            var neutralR = new System.Collections.Generic.List<float>();
+            var neutralG = new System.Collections.Generic.List<float>();
+            var neutralB = new System.Collections.Generic.List<float>();
+            float alphaSum = 0f;
+            int total = 0;
             for (int yy = sy0; yy < sy1; yy++)
             {
                 for (int xx = sx0; xx < sx1; xx++)
                 {
                     Color c = src[yy * sw + xx];
-                    ar += c.r; ag += c.g; ab += c.b; aa += c.a; cnt++;
-                }
-            }
-            if (cnt <= 0) { alpha = 0f; return Color.clear; }
-
-            Color average = new Color(ar / cnt, ag / cnt, ab / cnt, aa / cnt);
-            alpha = average.a;
-            Color best = average;
-            float bestScore = -1f;
-            for (int yy = sy0; yy < sy1; yy++)
-            {
-                for (int xx = sx0; xx < sx1; xx++)
-                {
-                    Color c = src[yy * sw + xx];
+                    alphaSum += c.a;
+                    total++;
                     if (c.a < AlphaThreshold) continue;
+                    rr.Add(c.r);
+                    gg.Add(c.g);
+                    bb.Add(c.b);
                     float h, s, v;
                     Color.RGBToHSV(c, out h, out s, out v);
-                    float dr = c.r - average.r, dg = c.g - average.g, db = c.b - average.b;
-                    float score = (dr * dr + dg * dg + db * db) * 1.35f + s * 0.28f + c.a * 0.08f;
-                    if (score > bestScore) { bestScore = score; best = c; }
+                    if (v >= 0.75f && s <= 0.20f)
+                    {
+                        neutralR.Add(c.r); neutralG.Add(c.g); neutralB.Add(c.b);
+                    }
                 }
             }
-            return Color.Lerp(average, best, 0.55f);
+            if (total <= 0) { alpha = 0f; return Color.clear; }
+            alpha = alphaSum / total;
+            if (rr.Count == 0) return Color.clear;
+
+            // Beyaz/ivory alan hucrenin en az ucte biriyse bu gercek bir beyaz boncuktur.
+            // Daha azsa renkli boncugun kucuk spekuler parlamasidir ve palete beyaz diye girmez.
+            if (neutralR.Count >= 4 && neutralR.Count * 3 >= rr.Count)
+            {
+                neutralR.Sort(); neutralG.Sort(); neutralB.Sort();
+                int nt = neutralR.Count >= 8 ? Mathf.Max(1, neutralR.Count / 8) : 0;
+                int ne = neutralR.Count - nt;
+                float nr = 0f, ng = 0f, nb = 0f;
+                for (int i = nt; i < ne; i++) { nr += neutralR[i]; ng += neutralG[i]; nb += neutralB[i]; }
+                float ni = 1f / Mathf.Max(1, ne - nt);
+                return new Color(nr * ni, ng * ni, nb * ni, 1f);
+            }
+
+            rr.Sort(); gg.Sort(); bb.Sort();
+            int trim = rr.Count >= 8 ? Mathf.Max(1, rr.Count / 8) : 0;
+            int end = rr.Count - trim;
+            float ar = 0f, ag = 0f, ab = 0f;
+            for (int i = trim; i < end; i++) { ar += rr[i]; ag += gg[i]; ab += bb[i]; }
+            float inv = 1f / Mathf.Max(1, end - trim);
+            return new Color(ar * inv, ag * inv, ab * inv, 1f);
         }
         // KRITIK RENK GARANTISI: palet, kucuk-ama-onemli renkleri (goz, kontur, minik vurgu) kacirmis olabilir.
         // En KOTU temsil edilen hucre rengini bulur, paletteki EN AZ kullanilan slotu onunla degistirir (2 tur).
@@ -365,7 +389,7 @@ namespace ColorCargoLoop
         static void EnsureSalientColors(Color[,] cell, bool[,] solid, int th, int tw, Color[] palette)
         {
             if (palette == null || palette.Length < 3) return;
-            for (int round = 0; round < 2; round++)
+            for (int round = 0; round < 4; round++)
             {
                 int[] usage = new int[palette.Length];
                 float worst = 0f; Color worstColor = Color.black;
@@ -439,7 +463,8 @@ namespace ColorCargoLoop
                     foreach (var c in bx) { if (c.r < mnr) mnr = c.r; if (c.r > mxr) mxr = c.r; if (c.g < mng) mng = c.g; if (c.g > mxg) mxg = c.g; if (c.b < mnb) mnb = c.b; if (c.b > mxb) mxb = c.b; }
                     float rr = mxr - mnr, rg = mxg - mng, rb = mxb - mnb;
                     float range = Mathf.Max(rr, Mathf.Max(rg, rb));
-                    if (range > bestRange) { bestRange = range; bi = i; bch = (rr >= rg && rr >= rb) ? 0 : (rg >= rb ? 1 : 2); }
+                    float splitScore = range * Mathf.Sqrt(bx.Count); // sira/outlier yerine tum resimdeki alan + renk araligi
+                    if (splitScore > bestRange) { bestRange = splitScore; bi = i; bch = (rr >= rg && rr >= rb) ? 0 : (rg >= rb ? 1 : 2); }
                 }
                 if (bi < 0) break;
                 var box = boxes[bi];

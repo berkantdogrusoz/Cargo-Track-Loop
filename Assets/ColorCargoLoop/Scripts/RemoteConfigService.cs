@@ -25,15 +25,21 @@ namespace ColorCargoLoop
         public static void Initialize()
         {
             FirebaseRemoteConfig rc = FirebaseRemoteConfig.DefaultInstance;
-            rc.SetDefaultsAsync(Defaults).ContinueWithOnMainThread(_ =>
+            // Varsayilan fetch araligi 12 SAAT: zorunlu guncelleme gibi degisikliklerin oyunculara
+            // ulasmasi cok gecikiyordu -> 1 saate cekildi (kota-guvenli, Firebase onerilen araliklarda).
+            ConfigSettings settings = new ConfigSettings { MinimumFetchIntervalInMilliseconds = 3600000 };
+            rc.SetConfigSettingsAsync(settings).ContinueWithOnMainThread(__ =>
             {
-                rc.FetchAndActivateAsync().ContinueWithOnMainThread(task =>
+                rc.SetDefaultsAsync(Defaults).ContinueWithOnMainThread(_ =>
                 {
-                    ready = true; // fetch basarisiz olsa bile defaults ile devam
-                    if (task.IsFaulted || task.IsCanceled)
-                        Debug.LogWarning("[RemoteConfig] fetch hata (defaults ile devam): " + task.Exception);
-                    else
-                        Debug.Log("[RemoteConfig] HAZIR (activated=" + task.Result + ")");
+                    rc.FetchAndActivateAsync().ContinueWithOnMainThread(task =>
+                    {
+                        ready = true; // fetch basarisiz olsa bile defaults ile devam
+                        if (task.IsFaulted || task.IsCanceled)
+                            Debug.LogWarning("[RemoteConfig] fetch hata (defaults ile devam): " + task.Exception);
+                        else
+                            Debug.Log("[RemoteConfig] HAZIR (activated=" + task.Result + ")");
+                    });
                 });
             });
         }

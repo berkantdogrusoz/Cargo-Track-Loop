@@ -1,6 +1,5 @@
-// Toon selale (BUILT-IN pipeline - Shader Graph URP ister, bizde calismaz; bu el yazmasi CG).
-// Referans stil: turkuaz su + kayan koyu benekler + ust/alt beyaz kopuk. A21s dostu: tek pass, 2 texture okuma.
-// Animasyon _Time ile shader icinde akar -> script Update gerekmez.
+// Built-in pipeline icin hafif su akisi. Arka planda mor su damarlari, dekor modunda kopuklu selale verir.
+// Tek pass + iki texture okuma; animasyon shader _Time ile akar, script Update gerekmez.
 Shader "Color Cargo Loop/Toon Waterfall"
 {
     Properties
@@ -15,6 +14,7 @@ Shader "Color Cargo Loop/Toon Waterfall"
         _FoamBottom ("Alt Kopuk", Range(0,0.6)) = 0.20
         _TopFoam ("Ust Kopuk", Range(0,0.3)) = 0.06
         _WobbleAmp ("Salinim", Float) = 0.03
+        _CausticStrength ("Isik Damar Siddeti", Range(0,1)) = 0.28
     }
     SubShader
     {
@@ -29,7 +29,7 @@ Shader "Color Cargo Loop/Toon Waterfall"
 
             sampler2D _NoiseTex;
             fixed4 _ColorA, _ColorB, _FoamColor;
-            float _FlowSpeed, _PatchScale, _PatchCut, _FoamBottom, _TopFoam, _WobbleAmp;
+            float _FlowSpeed, _PatchScale, _PatchCut, _FoamBottom, _TopFoam, _WobbleAmp, _CausticStrength;
 
             struct v2f { float4 pos : SV_POSITION; float2 uv : TEXCOORD0; };
 
@@ -47,19 +47,20 @@ Shader "Color Cargo Loop/Toon Waterfall"
             fixed4 frag(v2f i) : SV_Target
             {
                 float t = _Time.y * _FlowSpeed;
-                // iki katman kayan noise (farkli hiz/olcek) -> derinlikli akis hissi
-                float2 uv1 = float2(i.uv.x * _PatchScale, (i.uv.y + t) * _PatchScale * 0.85);
-                float2 uv2 = float2(i.uv.x * _PatchScale * 1.7 + 0.37, (i.uv.y + t * 1.55) * _PatchScale * 1.35);
+                // Iki yone kayan noise. Kesisim cizgileri su yuzeyindeki parlak damar hissini verir.
+                float2 uv1 = i.uv * _PatchScale + float2(t * 0.32, t);
+                float2 uv2 = i.uv * (_PatchScale * 1.73) + float2(0.37 - t * 0.68, 0.19 + t * 0.46);
                 float n1 = tex2D(_NoiseTex, uv1).r;
                 float n2 = tex2D(_NoiseTex, uv2).r;
-                float n = n1 * 0.65 + n2 * 0.35;
+                float n = n1 * 0.62 + n2 * 0.38;
 
-                // toon benekler: esikli koyu su lekeleri (referanstaki desen)
-                float patch = smoothstep(_PatchCut, _PatchCut + 0.13, n);
-                fixed3 col = lerp(_ColorB.rgb, _ColorA.rgb, patch);
+                float body = smoothstep(0.26, 0.76, n);
+                fixed3 col = lerp(_ColorB.rgb, _ColorA.rgb, body);
 
-                // parlak isik oynamalari (ince acik cizgiler)
-                col = lerp(col, _FoamColor.rgb, smoothstep(0.82, 0.93, n2) * 0.35);
+                // Iki noise degeri birbirine yaklastiginda ince, organik isik damari olusur.
+                float ridge = 1.0 - saturate(abs(n1 - n2) * 4.0);
+                float caustic = smoothstep(_PatchCut, min(0.99, _PatchCut + 0.16), ridge);
+                col = lerp(col, _FoamColor.rgb, caustic * _CausticStrength);
 
                 // ALT KOPUK: noise ile kenari yenmis kabarik beyaz bolge (dusme noktasi)
                 float edgeB = _FoamBottom * (0.7 + n * 0.6);

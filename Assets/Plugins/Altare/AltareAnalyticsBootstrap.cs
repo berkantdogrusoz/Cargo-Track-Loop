@@ -1,13 +1,13 @@
 // =============================================================================
-// AltareAnalyticsBootstrap.cs  —  v2.1.0
+// AltareAnalyticsBootstrap.cs  —  v2.4.0
 // -----------------------------------------------------------------------------
 // AltareAnalytics SDK'sini sahnelere dokunmadan otomatik baslatir.
 // Drop-in: bu script projeye eklendiginde uygulama acilisinda kendiliginden
 // devreye girer.
 //
 // PRIVACY/CONSENT (KVKK/GDPR):
-// Consent panelinden gelen onayi (PlayerPrefs) kontrol eder. Onay yoksa
-// SDK'yi baslatmaz; onay sonradan verilirse sessizce retry yaparak baslatir.
+// PlayerPrefs'te acik bir ret (0) varsa SDK'yi baslatmaz. Anahtar hic yoksa
+// analytics varsayilan acilir; onay sonradan 1 olursa sessizce baslatir.
 //
 // HER OYUN ICIN AYARLANACAK:
 //   GameId    = "your-game-id"   // Firestore'da games/{GameId}/events
@@ -43,7 +43,10 @@ public static class AltareAnalyticsBootstrap
 
     private static bool HasAnalyticsConsent()
     {
-        return PlayerPrefs.GetInt(ConsentAnalyticsKey, 0) == 1;
+        // Anahtar hic yazilmamissa oyunda consent UI yoktur; SDK varsayilan olarak calisir.
+        // Bir consent ekrani acikca 0 yazarsa veri toplama durur ve 1 olana kadar beklenir.
+        return !PlayerPrefs.HasKey(ConsentAnalyticsKey)
+               || PlayerPrefs.GetInt(ConsentAnalyticsKey, 0) == 1;
     }
 
     private static void StartSdk()
@@ -89,8 +92,18 @@ public static class AltareAnalyticsBootstrap
 
         public static void TryInvokeInitialize(string gameId, string gameName)
         {
-            System.Type t = System.Type.GetType("Altare.Analytics.AltareAnalytics, Assembly-CSharp")
+            System.Type t = System.Type.GetType("Altare.Analytics.AltareAnalytics, Assembly-CSharp-firstpass")
+                            ?? System.Type.GetType("Altare.Analytics.AltareAnalytics, Assembly-CSharp")
                             ?? System.Type.GetType("Altare.Analytics.AltareAnalytics");
+
+            if (t == null)
+            {
+                foreach (System.Reflection.Assembly assembly in System.AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    t = assembly.GetType("Altare.Analytics.AltareAnalytics", false);
+                    if (t != null) break;
+                }
+            }
 
             if (t == null)
             {

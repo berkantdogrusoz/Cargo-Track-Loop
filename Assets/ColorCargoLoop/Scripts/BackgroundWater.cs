@@ -33,6 +33,7 @@ namespace ColorCargoLoop
 
         const string ShaderName = "Color Cargo Loop/Toon Waterfall";
         Material mat;
+        static Texture2D runtimeNoise;
 
         void Start()
         {
@@ -48,6 +49,7 @@ namespace ColorCargoLoop
             Shader sh = Shader.Find(ShaderName);
             if (sh == null) { Debug.LogWarning("[ArkaplanSu] '" + ShaderName + "' shader bulunamadi."); return; }
             mat = new Material(sh) { name = "MAT_ArkaplanSu_Runtime" };
+            mat.SetTexture("_NoiseTex", GetRuntimeNoise());
             Push();
             mr.sharedMaterial = mat;
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
@@ -84,6 +86,32 @@ namespace ColorCargoLoop
             mat.SetFloat("_FoamBottom", bottomFoam);
             mat.SetFloat("_TopFoam", topFoam);
             mat.SetFloat("_WobbleAmp", 0f); // zemin kenarlari sallanmasin (acik kenar olusmasin)
+        }
+
+        internal static Texture2D GetRuntimeNoise()
+        {
+            if (runtimeNoise != null) return runtimeNoise;
+            const int size = 128;
+            runtimeNoise = new Texture2D(size, size, TextureFormat.RGBA32, false)
+            {
+                wrapMode = TextureWrapMode.Mirror,
+                filterMode = FilterMode.Bilinear,
+                name = "BackgroundWaterNoise"
+            };
+            var pixels = new Color32[size * size];
+            for (int y = 0; y < size; y++)
+            {
+                for (int x = 0; x < size; x++)
+                {
+                    float n = Mathf.PerlinNoise(x * 0.055f, y * 0.055f) * 0.65f
+                            + Mathf.PerlinNoise(x * 0.12f + 19.7f, y * 0.12f + 43.1f) * 0.35f;
+                    byte value = (byte)Mathf.Clamp(Mathf.RoundToInt(n * 255f), 0, 255);
+                    pixels[y * size + x] = new Color32(value, value, value, 255);
+                }
+            }
+            runtimeNoise.SetPixels32(pixels);
+            runtimeNoise.Apply(false, true);
+            return runtimeNoise;
         }
     }
 }
