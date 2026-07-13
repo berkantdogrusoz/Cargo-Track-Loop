@@ -25,10 +25,10 @@
   });
 
   const pandaData = [
-    ["Y", 32], ["C", 37], ["W", 34],
-    ["O", 34], ["G", 38], ["K", 37],
-    ["L", 37], ["T", 34], ["B", 38],
-    ["P", 36], ["U", 31], ["N", 29]
+    ["Y", 10], ["C", 10], ["W", 10],
+    ["O", 10], ["G", 10], ["K", 10],
+    ["L", 10], ["T", 10], ["B", 10],
+    ["P", 10], ["U", 10], ["N", 10]
   ];
 
   function makeAudioPool(source, count) {
@@ -160,7 +160,7 @@
     const slotPanda = document.createElement("div");
     slotPanda.className = "slot-panda";
     slotPanda.style.setProperty("--cube", colorByChar[color]);
-    slotPanda.innerHTML = pandaMarkup(color, count);
+    slotPanda.innerHTML = pandaMarkup(color, count) + '<span class="mouth-point"></span>';
     slot.appendChild(slotPanda);
     return slotPanda;
   }
@@ -174,7 +174,7 @@
 
   function launchCube(source, color, targetCell) {
     const stageRect = stage.getBoundingClientRect();
-    const sourceElement = source.querySelector(".ammo") || source;
+    const sourceElement = source.querySelector(".mouth-point") || source.querySelector(".ammo") || source;
     const from = sourceElement.getBoundingClientRect();
     const board = portrait.getBoundingClientRect();
     const targetX = board.left + board.width * ((targetCell.x + .5) / level.rows[0].length);
@@ -188,8 +188,8 @@
     cube.style.setProperty("--to-y", ((targetY - stageRect.top) / stageRect.height * 100) + "%");
     stage.appendChild(cube);
     pulseThrow(source);
-    playSound("throw", .28, .94 + Math.random() * .12);
-    setTimeout(() => cube.remove(), 850);
+    playSound("throw", .34, .94 + Math.random() * .12);
+    setTimeout(() => cube.remove(), 430);
   }
 
   async function pourFromSlot(slotPanda, color, totalCount) {
@@ -201,7 +201,7 @@
       return;
     }
 
-    const visualThrows = Math.min(12, Math.max(9, Math.ceil(totalCount / 4)));
+    const visualThrows = 10;
     const cellsPerThrow = Math.ceil(remainingCells / visualThrows);
     const label = slotPanda.querySelector(".count");
     const ammo = slotPanda.querySelector(".ammo");
@@ -210,18 +210,18 @@
       const targetReveal = Math.min(targetCells.length, startReveal + (i + 1) * cellsPerThrow);
       const targetCell = targetCells[Math.max(startReveal, targetReveal - 1)];
       launchCube(slotPanda, color, targetCell);
-      const remainingCount = Math.max(0, totalCount - Math.round((i + 1) * totalCount / visualThrows));
+      const remainingCount = Math.max(0, totalCount - i - 1);
       label.textContent = remainingCount;
       if (remainingCount === 0) ammo.style.opacity = "0";
       setTimeout(() => {
         revealedCount[color] = Math.max(revealedCount[color], targetReveal);
         drawPortrait(portrait);
         playSound("land", .18, 1.16);
-      }, 500);
-      await sleep(125);
+      }, 340);
+      await sleep(170);
     }
 
-    await sleep(590);
+    await sleep(250);
     revealedCount[color] = targetCells.length;
     drawPortrait(portrait);
   }

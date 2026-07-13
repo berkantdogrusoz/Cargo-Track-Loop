@@ -20,7 +20,7 @@ Google App Campaigns icin, oyunun guncel Unity sahnesini temel alan responsive o
 
 ## Oynanis
 
-Oyuncu kuyruktaki Anubis'e dokunur. Portreye bakan Anubis kendi sutunundan slota ziplayip yerlesir; sayaci azalirken kupleri sesli ve tek tek portreye firlatir. Her kup varisinda gercek Level 1 portresinin ilgili hucreleri parca parca acilir. Dev kup ve ekstra slot booster'lari da etkilesimlidir. Yedi hamle sonunda tamamlanan gercek portre ve Google `ExitApi.exit()` kullanan CTA gorunur.
+Oyuncu kuyruktaki Anubis'e dokunur. Portreye bakan Anubis kendi sutunundan slota ziplayip yerlesir; her Anubis 10 kup tasir ve sayaci 10'dan 0'a inerken kupleri agiz hizasindan sesli, tek tek ve duz bir atisla portreye firlatir. Her kup varisinda gercek Level 1 portresinin ilgili hucreleri parca parca acilir. Dev kup ve ekstra slot booster'lari da etkilesimlidir. Yedi hamle sonunda tamamlanan gercek portre ve Google `ExitApi.exit()` kullanan CTA gorunur.
 
 ## Google Kontrolleri
 
