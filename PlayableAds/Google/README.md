@@ -15,17 +15,18 @@ Google App Campaigns icin, oyunun guncel Unity sahnesini temel alan responsive o
 - Anubis, piramit, kaktus, kaya ve kemikler: Oyunda kullanilan FBX + base-color texture dosyalari
 - Booster bari ve dort buton: Sahnedeki gercek PNG sprite'lari
 - HUD: Oyundaki kalp, coin ve tutorial el sprite'lari
+- Ses: Unity sahnesindeki jump, land, tekil kup atisi ve tamamlanma SFX'leri
 - Portre: `Assets/Art/Portraits/PortraitSet.asset` icindeki Level 1, 56x56 satir ve 12 renkli adaptif palet
 
 ## Oynanis
 
-Oyuncu kuyruktaki Anubis'e dokunur. Anubis kendi sutununda one kayar, bir slot kisa sure dolar ve renkli kupler portreye ucar. Portre gercek Level 1 verisinden parca parca olusur. Dev kup ve ekstra slot booster'lari da etkilesimlidir. Yedi hamle sonunda tamamlanan gercek portre ve Google `ExitApi.exit()` kullanan CTA gorunur.
+Oyuncu kuyruktaki Anubis'e dokunur. Portreye bakan Anubis kendi sutunundan slota ziplayip yerlesir; sayaci azalirken kupleri sesli ve tek tek portreye firlatir. Her kup varisinda gercek Level 1 portresinin ilgili hucreleri parca parca acilir. Dev kup ve ekstra slot booster'lari da etkilesimlidir. Yedi hamle sonunda tamamlanan gercek portre ve Google `ExitApi.exit()` kullanan CTA gorunur.
 
 ## Google Kontrolleri
 
 - Paket kokunde `index.html` bulunur.
 - Tek harici referans Google Ads resmi `ExitApi` betigidir; oyun gorsellerinin tamami yereldir.
-- Otomatik ses veya video yoktur.
+- Ses yalnizca ilk oyuncu etkilesiminden sonra calar; otomatik video yoktur.
 - Portrait ve landscape yerlesimler ayni 9:16 oyun sahnesini korur.
 - Paket 5 MB ve 512 dosya sinirlarinin altindadir.
 - JavaScript syntax, asset yukleme, sutun kaymasi, portre doldurma ve final karti tarayicida test edilmistir.

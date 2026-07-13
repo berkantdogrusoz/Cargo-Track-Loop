@@ -124,14 +124,49 @@ button { font: inherit; }
   border-radius: 22%;
   box-shadow: 0 2px 0 rgba(170, 91, 45, .25);
 }
-.slot.occupied::after {
-  content: "";
+.slot.occupied {
+  z-index: 10;
+  border-color: rgba(255, 255, 255, .82);
+  box-shadow: 0 3px 0 rgba(170, 91, 45, .3), 0 0 0 3px rgba(255, 213, 116, .55);
+}
+.moving-panda {
   position: absolute;
-  inset: 15%;
-  border-radius: 20%;
-  background: var(--cube, #6d5b4b);
-  box-shadow: inset 0 0 0 2px rgba(255,255,255,.36), 0 2px 1px rgba(0,0,0,.18);
-  animation: slotCube .58s ease-in-out infinite alternate;
+  z-index: 24;
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  overflow: visible;
+  pointer-events: none;
+  transform-origin: 50% 84%;
+}
+.slot-panda {
+  position: absolute;
+  z-index: 9;
+  inset: 0;
+  overflow: visible;
+  pointer-events: none;
+  transform-origin: 50% 82%;
+}
+.slot-panda .anubis-img {
+  width: 150%;
+  height: 165%;
+  left: -25%;
+  top: -58%;
+}
+.slot-panda .ammo {
+  width: 26%;
+  left: 37%;
+  top: -44%;
+}
+.slot-panda .count {
+  left: 17%;
+  top: 15%;
+  width: 66%;
+  font-size: clamp(10px, 3.2vmin, 17px);
+}
+.slot-panda.throwing .anubis-img {
+  animation: pandaThrowPulse .16s ease-out;
 }
 
 .queue {
@@ -326,7 +361,7 @@ button { font: inherit; }
 }
 
 @keyframes ammoBob { to { transform: translateY(-16%) rotate(31deg); } }
-@keyframes slotCube { to { transform: translateY(-7%) rotate(5deg); } }
+@keyframes pandaThrowPulse { 45% { transform: translateY(-7%) rotate(-4deg) scale(1.06); } }
 @keyframes handTap { 0%,100% { transform: translate(0,0) rotate(-8deg); } 48% { transform: translate(-9%, 12%) rotate(-8deg) scale(.94); } }
 @keyframes pandaPop { 45% { transform: translateY(-28%) scale(1.14); } 100% { transform: translateY(-42%) scale(.12); opacity: 0; } }
 @keyframes cubeFly {

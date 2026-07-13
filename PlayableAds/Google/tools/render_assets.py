@@ -17,6 +17,12 @@ ASSETS = [
         -64.0,
     ),
     (
+        "anubis-back",
+        "Assets/Art/tripo_convert_d47b84d0-cf5a-4452-a58e-47ad933360e2.fbm/egyptian+jackal+3d+model.fbx",
+        "Assets/Art/tripo_convert_d47b84d0-cf5a-4452-a58e-47ad933360e2.fbm/egyptian+jackal+3d+model.fbm/egyptian+jackal+3d+model_basecolor.jpg",
+        64.0,
+    ),
+    (
         "pyramid",
         "Assets/Art/kaya/piramid/pyramid+3d+model.fbx",
         "Assets/Art/kaya/piramid/pyramid+3d+model.fbm/pyramid+3d+model_basecolor.jpg",
